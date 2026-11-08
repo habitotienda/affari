@@ -1,0 +1,2 @@
+# Render instala desde la raíz del repo: las dependencias viven en backend/requirements.txt
+-r backend/requirements.txt

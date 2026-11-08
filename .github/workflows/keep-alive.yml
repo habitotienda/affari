@@ -1,0 +1,15 @@
+name: Keep Render awake
+on:
+  schedule:
+    - cron: "*/10 * * * *"     # cada 10 min (GitHub puede demorarlo unos minutos)
+  workflow_dispatch:            # también se puede lanzar a mano desde la pestaña Actions
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: GET /ping
+        env:
+          RENDER_URL: ${{ secrets.RENDER_URL }}     # Settings > Secrets and variables > Actions > New secret
+        run: |
+          test -n "$RENDER_URL" || { echo "Falta el secret RENDER_URL"; exit 1; }
+          curl --fail --silent --show-error --max-time 90 --retry 2 --retry-delay 10 "${RENDER_URL%/}/ping"
