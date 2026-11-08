@@ -300,3 +300,34 @@
 .sf-hrow.today{font-weight:800;color:var(--ac)}
 .sf-hero.cover .sf-hours{background:rgba(255,255,255,.95);color:#0F172A}
 .sf-shell[data-align=center] .sf-hours{margin-inline:auto}
+
+/* ---------- Vista que elige el comprador: 2 columnas · 1 columna · lista horizontal ---------- */
+.sf-metarow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sf-vtoggle{display:flex;gap:2px;padding:3px;margin-left:auto;border:1px solid var(--line);border-radius:999px;background:var(--card);flex:none}
+.sf-vtoggle button{width:34px;height:30px;display:grid;place-items:center;border:0;border-radius:999px;background:none;color:var(--mu);cursor:pointer;transition:background .15s,color .15s}
+.sf-vtoggle button:hover{color:var(--tx)}
+.sf-vtoggle button[aria-pressed=true]{background:var(--ac);color:var(--on)}
+.sf-vtoggle svg{width:18px;height:18px}
+/* 2 columnas: en celular fuerza 2; en pantallas anchas queda la grilla de siempre */
+@container sf (max-width:619px){.sf-shell[data-view="2"] .sf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* 1 columna: tarjeta grande, centrada */
+.sf-shell[data-view="1"] .sf-grid{grid-template-columns:minmax(0,1fr);max-width:600px;width:100%;margin-inline:auto}
+.sf-shell[data-view="1"] .sf-slides,.sf-shell[data-view="1"] .sf-noimg{aspect-ratio:4/3}
+.sf-shell[data-view="1"] .sf-info h3{font-size:17px}
+/* Lista horizontal (estilo Treinta): foto a la izquierda, datos a la derecha */
+.sf-shell[data-view="list"] .sf-grid{grid-template-columns:minmax(0,1fr);gap:10px}
+@container sf (min-width:900px){.sf-shell[data-view="list"] .sf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sf-shell[data-view="list"] .sf-card{flex-direction:row;align-items:stretch}
+.sf-shell[data-view="list"] .sf-card:hover{transform:none}
+.sf-shell[data-view="list"] .sf-gal{flex:0 0 116px;width:116px;min-height:116px}
+.sf-shell[data-view="list"] .sf-slides{aspect-ratio:auto;height:100%;min-height:116px}
+.sf-shell[data-view="list"] .sf-noimg{aspect-ratio:auto;height:100%;min-height:116px;font-size:34px}
+.sf-shell[data-view="list"] .sf-thumbs,.sf-shell[data-view="list"] .sf-gal .sf-arrow{display:none}
+.sf-shell[data-view="list"] .sf-flag{top:6px;left:6px;font-size:10px;padding:2px 7px}
+.sf-shell[data-view="list"] .sf-info{min-width:0;padding:10px 12px;gap:6px}
+.sf-shell[data-view="list"] .sf-info h3{font-size:15px}
+.sf-shell[data-view="list"] .sf-info p{-webkit-line-clamp:1}
+.sf-shell[data-view="list"] .sf-price{font-size:17px}
+.sf-shell[data-view="list"] .sf-info>[data-step]{margin-top:auto;justify-self:start}
+.sf-shell[data-view="list"] .sf-add{width:auto;height:34px;padding:0 14px;font-size:13px}
+.sf-shell[data-view="list"] .sf-step button{height:32px;width:34px}

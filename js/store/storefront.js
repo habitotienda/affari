@@ -11,6 +11,12 @@ function mountStore(el, init) {
   const live = () => products.filter(p => p.active !== false);
   const skew = init.serverNow ? init.serverNow - Date.now() : 0, now = () => Date.now() + skew;   // el reloj del visitante puede estar mal: se corrige con el del servidor
   let hoursOpen = false, hoursTimer = 0;
+  /* Vista elegida por el comprador (2 columnas / 1 columna / lista horizontal). Se recuerda por comercio; sin elección vale la del dueño. */
+  const VKEY = init.slug ? 'affari:view:' + init.slug : null, VIEWS_OK = ['1', '2', 'list'];
+  let vsaved = ''; try { vsaved = (VKEY && localStorage.getItem(VKEY)) || ''; } catch {}
+  if (!VIEWS_OK.includes(vsaved)) vsaved = '';
+  const viewMode = () => vsaved || String(theme().cols === 1 ? 1 : 2);
+  const applyView = () => { const v = viewMode(); root.dataset.view = v; el.querySelectorAll('[data-vmode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.vmode === v))); };
 
   el.innerHTML = `<div class="sf-shell" data-root><div class="sf-bgfx" data-fx aria-hidden="true"></div>
     <div class="sf"><div data-hero></div>
@@ -23,7 +29,12 @@ function mountStore(el, init) {
           <label>Precio máximo<input data-fl="max" type="number" inputmode="numeric" min="0" placeholder="Sin límite"></label>
           <label class="sf-fck"><input data-fl="stock" type="checkbox"><span>Solo disponibles</span></label>
           <button type="button" class="sf-link" data-fclear>Limpiar filtros</button></div>
-        <div class="sf-chips" data-chips></div><div class="sf-meta" data-meta aria-live="polite"></div></div>
+        <div class="sf-chips" data-chips></div>
+        <div class="sf-metarow"><div class="sf-meta" data-meta aria-live="polite"></div>
+          <div class="sf-vtoggle" role="group" aria-label="Cómo ver los productos">
+            <button type="button" data-vmode="2" aria-label="2 columnas" title="2 columnas">${SF_ICON.vGrid}</button>
+            <button type="button" data-vmode="1" aria-label="1 columna" title="1 columna">${SF_ICON.vOne}</button>
+            <button type="button" data-vmode="list" aria-label="Lista horizontal" title="Lista horizontal">${SF_ICON.vList}</button></div></div></div>
       <div class="sf-grid" data-list></div><footer class="sf-foot" data-foot></footer><div class="sf-bar" data-bar></div></div>
     <button type="button" class="sf-pausebtn" data-pause hidden></button><div class="sf-layer" data-layer></div></div>`;
   const root = el.querySelector('[data-root]'), layer = el.querySelector('[data-layer]'), q = el.querySelector('[data-q]');
@@ -151,11 +162,13 @@ function mountStore(el, init) {
     el.querySelectorAll('[data-step]').forEach(s => { const p = byId(+s.dataset.step); if (p) s.innerHTML = stepHTML(p); });
     drawBar(); drawLines();
   });
-  const drawAll = () => { cart.prune(); drawHero(); drawChips(); drawList(); drawBar(); drawLines(); };
+  const drawAll = () => { cart.prune(); drawHero(); drawChips(); drawList(); drawBar(); drawLines(); applyView(); };
 
   /* ---------- Eventos ---------- */
   el.addEventListener('click', e => {
     const T = e.target, a = T.closest('[data-act]'), rm = T.closest('[data-rm]'), ch = T.closest('[data-chip]');
+    const vm = T.closest('[data-vmode]');
+    if (vm) { vsaved = vm.dataset.vmode; try { VKEY && localStorage.setItem(VKEY, vsaved); } catch {} return applyView(); }
     if (a) return cart.add(+a.dataset.id, a.dataset.act === 'inc' ? 1 : -1);
     if (rm) return cart.remove(+rm.dataset.rm);
     const hb = T.closest('[data-hours-toggle]');

@@ -12,6 +12,9 @@ const sfSvg = (d, s = 18, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 
 const SF_ICON = {
   search: sfSvg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
   cart: sfSvg('<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 12.4a1.6 1.6 0 0 0 1.6 1.3h8.2a1.6 1.6 0 0 0 1.6-1.2L21 8H6"/>', 20),
+  vGrid: sfSvg('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+  vOne: sfSvg('<rect x="4" y="3" width="16" height="8" rx="1.5"/><rect x="4" y="14" width="16" height="7" rx="1.5"/>'),
+  vList: sfSvg('<rect x="3" y="4" width="6" height="6" rx="1.2"/><rect x="3" y="14" width="6" height="6" rx="1.2"/><path d="M13 6h8M13 8.5h5M13 16h8M13 18.5h5"/>'),
   filter: sfSvg('<path d="M3 5h18M6 12h12M10 19h4"/>'),
   pause: sfSvg('<path d="M8 5v14M16 5v14"/>', 16, 2.6),
   play: sfSvg('<path d="M7 4v16l13-8z"/>', 16, 2),
