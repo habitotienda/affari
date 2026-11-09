@@ -2,7 +2,7 @@
    mountStore(el, { store, products, slug }) -> { update({ store, products }) } */
 function mountStore(el, init) {
   let stopPromos = () => {}, paused = false;
-  let store = init.store, products = init.products || [], cat = '', flt = { sort: '', min: '', max: '', stock: false }, lb = null, opener = null, drawer = false;
+  let store = init.store, products = init.products || [], cat = '', flt = { sort: '', min: '', max: '', stock: false }, lb = null, opener = null, drawer = false, formOpen = false;
   const info = { name: '', phone: '', delivery: '', address: '', note: '' };   // delivery: '' (sin elegir) | 'retiro' | 'envio'
   const byId = id => products.find(p => p.id === id);
   const cart = sfCart(init.slug ? 'affari:cart:' + init.slug : null, byId);
@@ -129,22 +129,22 @@ function mountStore(el, init) {
     layer.querySelector('[data-clear]').hidden = !has;
   };
   const openDrawer = () => {
-    if (drawer) return; drawer = true; opener = document.activeElement; const t = theme(), modes = sfModes(t);
+    if (drawer) return; drawer = true; formOpen = false; opener = document.activeElement; const t = theme(), modes = sfModes(t);
     if (modes.length === 1) info.delivery = modes[0];          // una sola forma de entrega: ya viene elegida
     else if (!modes.includes(info.delivery)) info.delivery = '';
     layer.insertAdjacentHTML('afterbegin', `<div class="sf-scrim" data-close-drawer></div>
       <aside class="sf-drawer" role="dialog" aria-modal="true" aria-label="Tu pedido">
         <header class="sf-dh"><h2>Tu pedido</h2><button type="button" class="sf-link" data-clear hidden>Vaciar</button><button type="button" class="sf-x" data-close-drawer aria-label="Cerrar carrito">${SF_ICON.close}</button></header>
         <div class="sf-lines" data-lines></div>
-        <footer class="sf-df"><div class="sf-form" data-form>
-          <p class="sf-fh">Tus datos</p>
-          <label class="sf-fld" data-fld="name">${SF_ICON.user}<input data-f="name" maxlength="60" placeholder="Nombre *" value="${sfEsc(info.name)}" aria-label="Tu nombre (obligatorio)" autocomplete="name" required></label>
-          <label class="sf-fld" data-fld="phone">${SF_ICON.phone}<input data-f="phone" type="tel" inputmode="tel" maxlength="25" placeholder="Teléfono *" value="${sfEsc(info.phone)}" aria-label="Tu teléfono (obligatorio)" autocomplete="tel" required></label>
+        <footer class="sf-df"><div class="sf-form" data-form hidden>
           <p class="sf-fh">¿Cómo lo recibís?</p>
           ${modes.length > 1 ? `<div class="sf-opts" role="radiogroup" aria-label="Entrega" data-fld="delivery">
             <label class="sf-opt"><input type="radio" name="sfdel" value="retiro" ${info.delivery === 'retiro' ? 'checked' : ''}><span>${SF_ICON.store}<b>Lo paso a buscar</b><small>Retiro en el local</small></span></label>
             <label class="sf-opt"><input type="radio" name="sfdel" value="envio" ${info.delivery === 'envio' ? 'checked' : ''}><span>${SF_ICON.scooter}<b>A mi domicilio</b><small>Envío a coordinar</small></span></label></div>`
           : `<div class="sf-pick">${modes[0] === 'envio' ? SF_ICON.scooter : SF_ICON.store}<span><b>${modes[0] === 'envio' ? 'A mi domicilio' : 'Lo paso a buscar'}</b><small>${modes[0] === 'envio' ? 'Envío a coordinar' : 'Retiro en el local'}</small></span></div>`}
+          <p class="sf-fh">Tus datos</p>
+          <label class="sf-fld" data-fld="name">${SF_ICON.user}<input data-f="name" maxlength="60" placeholder="Nombre *" value="${sfEsc(info.name)}" aria-label="Tu nombre (obligatorio)" autocomplete="name" required></label>
+          <label class="sf-fld" data-fld="phone">${SF_ICON.phone}<input data-f="phone" type="tel" inputmode="tel" maxlength="25" placeholder="Teléfono *" value="${sfEsc(info.phone)}" aria-label="Tu teléfono (obligatorio)" autocomplete="tel" required></label>
           <label class="sf-fld" data-fld="address" ${info.delivery === 'envio' ? '' : 'hidden'}>${SF_ICON.pin}<input data-f="address" maxlength="120" placeholder="Dirección de entrega *" value="${sfEsc(info.address)}" aria-label="Dirección de entrega (obligatoria)" autocomplete="street-address"></label>
           <label class="sf-fld ta" data-fld="note">${SF_ICON.msg}<textarea data-f="note" rows="2" maxlength="200" placeholder="Mensaje (opcional): talle, horario, aclaraciones…" aria-label="Mensaje (opcional)">${sfEsc(info.note)}</textarea></label></div>
           <div class="sf-sum" data-sum></div>
@@ -167,10 +167,10 @@ function mountStore(el, init) {
   /* Obligatorios: nombre, teléfono, forma de entrega y, solo si es a domicilio, la dirección. El mensaje es opcional. */
   const validate = () => {
     const err = {};
+    if (!info.delivery) err.delivery = 'Elegí cómo querés recibir tu pedido.';
     if ((info.name || '').trim().length < 2) err.name = 'Escribí tu nombre.';
     if ((info.phone || '').replace(/\D/g, '').length < 8) err.phone = 'Escribí un teléfono válido.';
-    if (!info.delivery) err.delivery = 'Elegí cómo querés recibir tu pedido.';
-    else if (info.delivery === 'envio' && (info.address || '').trim().length < 5) err.address = 'Escribí la dirección de entrega.';
+    if (info.delivery === 'envio' && (info.address || '').trim().length < 5) err.address = 'Escribí la dirección de entrega.';
     layer.querySelectorAll('[data-fld]').forEach(f => f.classList.toggle('invalid', !!err[f.dataset.fld]));
     const first = Object.keys(err)[0];
     layer.querySelector('[data-hint]').textContent = first ? err[first] : '';
@@ -179,6 +179,13 @@ function mountStore(el, init) {
   };
   const send = () => {
     const t = cart.totals(), ph = waNum(store.phone); if (!t.count || !ph) return;
+    if (!formOpen) {   // primer toque: aparece el formulario, con «¿Cómo lo recibís?» arriba de todo
+      formOpen = true; const fm = layer.querySelector('[data-form]'); fm.hidden = false;
+      fm.scrollIntoView({ block: 'nearest' });
+      const f = fm.querySelector('input[name="sfdel"]:checked') || fm.querySelector('input[name="sfdel"]') || fm.querySelector('input[data-f]');
+      if (f) f.focus({ preventScroll: true });
+      return;
+    }
     if (!validate()) return;
     window.open(`https://wa.me/${ph}?text=${encodeURIComponent(sfOrderMessage(store, t, info))}`, '_blank', 'noopener');
   };
