@@ -331,3 +331,31 @@
 .sf-shell[data-view="list"] .sf-info>[data-step]{margin-top:auto;justify-self:start}
 .sf-shell[data-view="list"] .sf-add{width:auto;height:34px;padding:0 14px;font-size:13px}
 .sf-shell[data-view="list"] .sf-step button{height:32px;width:34px}
+
+/* ---------- Formulario del pedido: datos, entrega y dirección ---------- */
+.sf-df{max-height:78%;overflow-y:auto;overscroll-behavior:contain}
+.sf-form{gap:10px}
+.sf-fh{margin:2px 0 -2px;font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.sf-fld{position:relative;display:block}
+.sf-fld[hidden]{display:none}
+.sf-fld>svg{position:absolute;left:12px;top:11px;color:var(--mu);pointer-events:none;transition:color .2s}
+.sf-fld:focus-within>svg{color:var(--ac)}
+.sf-form .sf-fld input[data-f],.sf-form .sf-fld textarea{padding-left:40px}
+.sf-fld.invalid input,.sf-fld.invalid textarea{border-color:#E11D48;box-shadow:0 0 0 3px rgba(225,29,72,.14)}
+.sf-fld.invalid>svg{color:#E11D48}
+.sf-opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sf-opt{position:relative;display:block;cursor:pointer}
+.sf-opt input{position:absolute;opacity:0;pointer-events:none}
+.sf-opt span{position:relative;display:grid;justify-items:center;gap:2px;height:100%;padding:12px 8px;text-align:center;border:1.5px solid var(--line);border-radius:calc(var(--r)*.6);background:var(--bg);transition:border-color .15s,background .15s,box-shadow .15s,transform .15s}
+.sf-opt:hover span{transform:translateY(-1px)}
+.sf-opt span svg{color:var(--ac);margin-bottom:2px}
+.sf-opt b{font-size:13.5px;font-weight:800}.sf-opt small{font-size:11.5px;color:var(--mu)}
+.sf-opt input:checked+span{border-color:var(--ac);background:color-mix(in srgb,var(--ac) 12%,var(--bg));box-shadow:0 0 0 3px color-mix(in srgb,var(--ac) 22%,transparent)}
+.sf-opt input:checked+span::after{content:"";position:absolute;top:7px;right:7px;width:16px;height:16px;border-radius:50%;background:var(--ac) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E") center/10px no-repeat}
+.sf-opt input:focus-visible+span{outline:2px solid var(--ac);outline-offset:2px}
+.sf-opts.invalid .sf-opt span{border-color:#E11D48;animation:sfshake .35s}
+.sf-pick{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1.5px solid var(--ac);border-radius:calc(var(--r)*.6);background:color-mix(in srgb,var(--ac) 10%,var(--bg))}
+.sf-pick svg{flex:none;color:var(--ac)}.sf-pick b{display:block;font-size:13.5px;font-weight:800}.sf-pick small{color:var(--mu);font-size:12px}
+.sf-sendrow{position:sticky;bottom:0;display:grid;gap:6px;margin-bottom:-16px;padding:8px 0 16px;background:var(--card)}
+@keyframes sfshake{0%,100%{transform:none}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+@media(prefers-reduced-motion:reduce){.sf-opts.invalid .sf-opt span{animation:none}.sf-opt:hover span{transform:none}}

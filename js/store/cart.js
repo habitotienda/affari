@@ -34,13 +34,15 @@ function sfCart(key, lookup) {
   return api;
 }
 
-/* Mensaje automático para WhatsApp. info = { name, delivery: 'retiro'|'envio', note } */
+/* Mensaje automático para WhatsApp. info = { name, phone, delivery: 'retiro'|'envio', address, note } */
 function sfOrderMessage(store, t, info = {}) {
-  const who = (info.name || '').trim();
+  const who = (info.name || '').trim(), envio = info.delivery === 'envio';
   const rows = t.lines.map(l => `• ${l.n} × ${l.p.name} — ${sfArs(l.sub)}` + (l.n > 1 ? ` (${sfArs(l.p.price)} c/u)` : ''));
   const out = [`Hola ${store.name}! ${who ? `Soy ${who}. ` : ''}Quiero hacer este pedido:`, '', ...rows, '',
-    `Total: ${sfArs(t.total)}`, `Entrega: ${info.delivery === 'envio' ? 'Envío (coordinar costo y horario)' : 'Retiro en el local'}`];
-  if ((info.note || '').trim()) out.push(`Nota: ${info.note.trim()}`);
+    `Total: ${sfArs(t.total)}`, `Entrega: ${envio ? 'A domicilio (coordinar costo y horario)' : 'Lo paso a buscar al local'}`];
+  if (envio && (info.address || '').trim()) out.push(`Dirección: ${info.address.trim()}`);
+  if ((info.phone || '').trim()) out.push(`Teléfono: ${info.phone.trim()}`);
+  if ((info.note || '').trim()) out.push(`Mensaje: ${info.note.trim()}`);
   out.push('', '¡Gracias!');
   return out.join('\n');
 }

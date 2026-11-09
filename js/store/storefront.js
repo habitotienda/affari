@@ -3,10 +3,13 @@
 function mountStore(el, init) {
   let stopPromos = () => {}, paused = false;
   let store = init.store, products = init.products || [], cat = '', flt = { sort: '', min: '', max: '', stock: false }, lb = null, opener = null, drawer = false;
-  const info = { name: '', delivery: 'retiro', note: '' };
+  const info = { name: '', phone: '', delivery: '', address: '', note: '' };   // delivery: '' (sin elegir) | 'retiro' | 'envio'
   const byId = id => products.find(p => p.id === id);
   const cart = sfCart(init.slug ? 'affari:cart:' + init.slug : null, byId);
   const embedded = !!el.closest('.phone');          // en el editor el panel vive dentro del "celular"
+  /* Datos del comprador: se recuerdan en su navegador para no volver a escribirlos (no en la vista previa del editor) */
+  const BKEY = !embedded && init.slug ? 'affari:buyer:' + init.slug : null;
+  try { if (BKEY) { const b = JSON.parse(localStorage.getItem(BKEY) || '{}'); ['name', 'phone', 'address'].forEach(k => { if (typeof b[k] === 'string') info[k] = b[k].slice(0, 120); }); } } catch {}
   const theme = () => ({ ...SF_DEF, ...(store.theme || {}) });
   const live = () => products.filter(p => p.active !== false);
   const skew = init.serverNow ? init.serverNow - Date.now() : 0, now = () => Date.now() + skew;   // el reloj del visitante puede estar mal: se corrige con el del servidor
@@ -131,12 +134,21 @@ function mountStore(el, init) {
       <aside class="sf-drawer" role="dialog" aria-modal="true" aria-label="Tu pedido">
         <header class="sf-dh"><h2>Tu pedido</h2><button type="button" class="sf-link" data-clear hidden>Vaciar</button><button type="button" class="sf-x" data-close-drawer aria-label="Cerrar carrito">${SF_ICON.close}</button></header>
         <div class="sf-lines" data-lines></div>
-        <footer class="sf-df"><div class="sf-form"><input data-f="name" maxlength="60" placeholder="Tu nombre (opcional)" value="${sfEsc(info.name)}" aria-label="Tu nombre" autocomplete="name">
-          ${t.delivery ? `<div class="sf-deliv" role="radiogroup" aria-label="Entrega"><label><input type="radio" name="sfdel" value="retiro" ${info.delivery === 'retiro' ? 'checked' : ''}><span>Retiro</span></label><label><input type="radio" name="sfdel" value="envio" ${info.delivery === 'envio' ? 'checked' : ''}><span>Envío</span></label></div>` : ''}
-          <textarea data-f="note" rows="2" maxlength="200" placeholder="Aclaraciones (talle, horario, dirección…)" aria-label="Aclaraciones">${sfEsc(info.note)}</textarea></div>
+        <footer class="sf-df"><div class="sf-form" data-form>
+          <p class="sf-fh">Tus datos</p>
+          <label class="sf-fld" data-fld="name">${SF_ICON.user}<input data-f="name" maxlength="60" placeholder="Nombre *" value="${sfEsc(info.name)}" aria-label="Tu nombre (obligatorio)" autocomplete="name" required></label>
+          <label class="sf-fld" data-fld="phone">${SF_ICON.phone}<input data-f="phone" type="tel" inputmode="tel" maxlength="25" placeholder="Teléfono *" value="${sfEsc(info.phone)}" aria-label="Tu teléfono (obligatorio)" autocomplete="tel" required></label>
+          <p class="sf-fh">¿Cómo lo recibís?</p>
+          ${t.delivery ? `<div class="sf-opts" role="radiogroup" aria-label="Entrega" data-fld="delivery">
+            <label class="sf-opt"><input type="radio" name="sfdel" value="retiro" ${info.delivery === 'retiro' ? 'checked' : ''}><span>${SF_ICON.bag}<b>Lo paso a buscar</b><small>Retiro en el local</small></span></label>
+            <label class="sf-opt"><input type="radio" name="sfdel" value="envio" ${info.delivery === 'envio' ? 'checked' : ''}><span>${SF_ICON.home}<b>A mi domicilio</b><small>Envío a coordinar</small></span></label></div>
+          <label class="sf-fld" data-fld="address" ${info.delivery === 'envio' ? '' : 'hidden'}>${SF_ICON.pin}<input data-f="address" maxlength="120" placeholder="Dirección de entrega *" value="${sfEsc(info.address)}" aria-label="Dirección de entrega (obligatoria)" autocomplete="street-address"></label>`
+          : `<div class="sf-pick">${SF_ICON.bag}<span><b>Lo paso a buscar</b><small>Retiro en el local</small></span></div>`}
+          <label class="sf-fld ta" data-fld="note">${SF_ICON.msg}<textarea data-f="note" rows="2" maxlength="200" placeholder="Mensaje (opcional): talle, horario, aclaraciones…" aria-label="Mensaje (opcional)">${sfEsc(info.note)}</textarea></label></div>
           <div class="sf-sum" data-sum></div>
-          <button type="button" class="sf-wa big" data-send>${SF_ICON.wa}Enviar pedido por WhatsApp</button><p class="sf-hint" data-hint></p></footer></aside>`);
-    if (!t.delivery) info.delivery = 'retiro';
+          <div class="sf-sendrow"><button type="button" class="sf-wa big" data-send>${SF_ICON.wa}Enviar pedido por WhatsApp</button><p class="sf-hint" data-hint role="alert"></p></div></footer></aside>`);
+    if (!t.delivery) info.delivery = 'retiro';          // el comercio no hace envíos: solo retiro
+    else if (!['retiro', 'envio'].includes(info.delivery)) info.delivery = '';
     if (!embedded) document.body.style.overflow = 'hidden';
     drawLines(); layer.querySelector('.sf-drawer .sf-x').focus();
   };
@@ -152,8 +164,22 @@ function mountStore(el, init) {
   };
   const closeLightbox = () => { if (!lb) return; lb.el.remove(); lb = null; if (!drawer && !embedded) document.body.style.overflow = ''; };
 
+  /* Obligatorios: nombre, teléfono, forma de entrega y, solo si es a domicilio, la dirección. El mensaje es opcional. */
+  const validate = () => {
+    const err = {};
+    if ((info.name || '').trim().length < 2) err.name = 'Escribí tu nombre.';
+    if ((info.phone || '').replace(/\D/g, '').length < 8) err.phone = 'Escribí un teléfono válido.';
+    if (!info.delivery) err.delivery = 'Elegí cómo querés recibir tu pedido.';
+    else if (info.delivery === 'envio' && (info.address || '').trim().length < 5) err.address = 'Escribí la dirección de entrega.';
+    layer.querySelectorAll('[data-fld]').forEach(f => f.classList.toggle('invalid', !!err[f.dataset.fld]));
+    const first = Object.keys(err)[0];
+    layer.querySelector('[data-hint]').textContent = first ? err[first] : '';
+    if (first) { const f = layer.querySelector(`[data-fld="${first}"]`); (f.querySelector('input,textarea') || f).focus(); }
+    return !first;
+  };
   const send = () => {
     const t = cart.totals(), ph = waNum(store.phone); if (!t.count || !ph) return;
+    if (!validate()) return;
     window.open(`https://wa.me/${ph}?text=${encodeURIComponent(sfOrderMessage(store, t, info))}`, '_blank', 'noopener');
   };
 
@@ -188,10 +214,21 @@ function mountStore(el, init) {
     if (ch) { cat = ch.dataset.chip; drawChips(); drawList(); }
   });
   el.addEventListener('input', e => {
-    const f = e.target.dataset && e.target.dataset.f; if (f) info[f] = e.target.value;
+    const f = e.target.dataset && e.target.dataset.f;
+    if (f) {
+      info[f] = e.target.value; e.target.closest('[data-fld]')?.classList.remove('invalid');
+      if (BKEY && f !== 'note') try { localStorage.setItem(BKEY, JSON.stringify({ name: info.name, phone: info.phone, address: info.address })); } catch {}
+    }
     const fl = e.target.dataset && e.target.dataset.fl; if (fl) { flt[fl] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; drawList(); }
   });
-  el.addEventListener('change', e => { if (e.target.name === 'sfdel') { info.delivery = e.target.value; drawLines(); } });
+  el.addEventListener('change', e => {
+    if (e.target.name !== 'sfdel') return;
+    info.delivery = e.target.value;
+    const ad = layer.querySelector('[data-fld="address"]'), dl = layer.querySelector('[data-fld="delivery"]');
+    if (dl) dl.classList.remove('invalid');
+    if (ad) { ad.hidden = info.delivery !== 'envio'; if (!ad.hidden) ad.querySelector('input').focus(); }
+    drawLines();
+  });
   el.addEventListener('scroll', sfGalleryScroll, true);
   document.addEventListener('keydown', e => {
     if (!el.isConnected || (!drawer && !lb)) return;
