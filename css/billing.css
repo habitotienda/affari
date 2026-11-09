@@ -1,0 +1,20 @@
+/* Planes y bloqueo de funciones */
+.plan-chip{width:100%;text-align:center;font:inherit;font-size:12.5px;font-weight:700;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--ink);cursor:pointer}
+.plan-chip.trial{background:#ECFDF5;border-color:#A7F3D0;color:#047857}
+.plan-chip.paid,.plan-chip.vip{background:#0F172A;border-color:#0F172A;color:#fff}
+.plan-chip.free{border-color:#FCD34D;background:#FFFBEB;color:#92400E}
+.plan-why{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;font-weight:600}
+.plan-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.plan-opt{position:relative;display:flex;flex-direction:column;gap:12px;padding:22px;border:1px solid var(--border);border-radius:10px;background:var(--card)}
+.plan-opt.hot{border-color:var(--primary-2);box-shadow:0 10px 28px rgba(16,185,129,.14)}
+.plan-opt .tag{position:absolute;top:-11px;left:18px;background:var(--primary);color:#fff;font-size:12px;font-weight:700;padding:3px 10px;border-radius:4px}
+.plan-opt h3{font-size:18px;font-weight:800;margin:0}
+.plan-opt .price{font-size:28px;font-weight:800}.plan-opt .price small{font-size:14px;color:var(--muted);font-weight:600}
+.plan-opt ul{list-style:none;padding:0;margin:0 0 4px;display:grid;gap:8px;flex:1}
+.plan-opt li{display:flex;gap:8px;align-items:flex-start}.plan-opt li svg{color:var(--primary);margin-top:2px;flex:none}
+.plan-foot{margin:12px 0 0;text-align:center}
+.lock-panel{max-width:520px;margin:10vh auto;padding:36px 28px;text-align:center;display:grid;gap:12px;justify-items:center}
+.lock-panel h2{margin:0;font-size:20px}.lock-panel p{margin:0;color:var(--muted)}
+.lock-ico{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:#ECFDF5;color:var(--primary)}
+.plan-note{margin:-6px 0 0;font-size:12.5px;color:var(--muted)}
+@media(max-width:640px){.plan-grid{grid-template-columns:1fr}}
