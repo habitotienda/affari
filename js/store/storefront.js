@@ -129,7 +129,9 @@ function mountStore(el, init) {
     layer.querySelector('[data-clear]').hidden = !has;
   };
   const openDrawer = () => {
-    if (drawer) return; drawer = true; opener = document.activeElement; const t = theme();
+    if (drawer) return; drawer = true; opener = document.activeElement; const t = theme(), modes = sfModes(t);
+    if (modes.length === 1) info.delivery = modes[0];          // una sola forma de entrega: ya viene elegida
+    else if (!modes.includes(info.delivery)) info.delivery = '';
     layer.insertAdjacentHTML('afterbegin', `<div class="sf-scrim" data-close-drawer></div>
       <aside class="sf-drawer" role="dialog" aria-modal="true" aria-label="Tu pedido">
         <header class="sf-dh"><h2>Tu pedido</h2><button type="button" class="sf-link" data-clear hidden>Vaciar</button><button type="button" class="sf-x" data-close-drawer aria-label="Cerrar carrito">${SF_ICON.close}</button></header>
@@ -139,16 +141,14 @@ function mountStore(el, init) {
           <label class="sf-fld" data-fld="name">${SF_ICON.user}<input data-f="name" maxlength="60" placeholder="Nombre *" value="${sfEsc(info.name)}" aria-label="Tu nombre (obligatorio)" autocomplete="name" required></label>
           <label class="sf-fld" data-fld="phone">${SF_ICON.phone}<input data-f="phone" type="tel" inputmode="tel" maxlength="25" placeholder="Teléfono *" value="${sfEsc(info.phone)}" aria-label="Tu teléfono (obligatorio)" autocomplete="tel" required></label>
           <p class="sf-fh">¿Cómo lo recibís?</p>
-          ${t.delivery ? `<div class="sf-opts" role="radiogroup" aria-label="Entrega" data-fld="delivery">
-            <label class="sf-opt"><input type="radio" name="sfdel" value="retiro" ${info.delivery === 'retiro' ? 'checked' : ''}><span>${SF_ICON.bag}<b>Lo paso a buscar</b><small>Retiro en el local</small></span></label>
-            <label class="sf-opt"><input type="radio" name="sfdel" value="envio" ${info.delivery === 'envio' ? 'checked' : ''}><span>${SF_ICON.home}<b>A mi domicilio</b><small>Envío a coordinar</small></span></label></div>
-          <label class="sf-fld" data-fld="address" ${info.delivery === 'envio' ? '' : 'hidden'}>${SF_ICON.pin}<input data-f="address" maxlength="120" placeholder="Dirección de entrega *" value="${sfEsc(info.address)}" aria-label="Dirección de entrega (obligatoria)" autocomplete="street-address"></label>`
-          : `<div class="sf-pick">${SF_ICON.bag}<span><b>Lo paso a buscar</b><small>Retiro en el local</small></span></div>`}
+          ${modes.length > 1 ? `<div class="sf-opts" role="radiogroup" aria-label="Entrega" data-fld="delivery">
+            <label class="sf-opt"><input type="radio" name="sfdel" value="retiro" ${info.delivery === 'retiro' ? 'checked' : ''}><span>${SF_ICON.store}<b>Lo paso a buscar</b><small>Retiro en el local</small></span></label>
+            <label class="sf-opt"><input type="radio" name="sfdel" value="envio" ${info.delivery === 'envio' ? 'checked' : ''}><span>${SF_ICON.scooter}<b>A mi domicilio</b><small>Envío a coordinar</small></span></label></div>`
+          : `<div class="sf-pick">${modes[0] === 'envio' ? SF_ICON.scooter : SF_ICON.store}<span><b>${modes[0] === 'envio' ? 'A mi domicilio' : 'Lo paso a buscar'}</b><small>${modes[0] === 'envio' ? 'Envío a coordinar' : 'Retiro en el local'}</small></span></div>`}
+          <label class="sf-fld" data-fld="address" ${info.delivery === 'envio' ? '' : 'hidden'}>${SF_ICON.pin}<input data-f="address" maxlength="120" placeholder="Dirección de entrega *" value="${sfEsc(info.address)}" aria-label="Dirección de entrega (obligatoria)" autocomplete="street-address"></label>
           <label class="sf-fld ta" data-fld="note">${SF_ICON.msg}<textarea data-f="note" rows="2" maxlength="200" placeholder="Mensaje (opcional): talle, horario, aclaraciones…" aria-label="Mensaje (opcional)">${sfEsc(info.note)}</textarea></label></div>
           <div class="sf-sum" data-sum></div>
           <div class="sf-sendrow"><button type="button" class="sf-wa big" data-send>${SF_ICON.wa}Enviar pedido por WhatsApp</button><p class="sf-hint" data-hint role="alert"></p></div></footer></aside>`);
-    if (!t.delivery) info.delivery = 'retiro';          // el comercio no hace envíos: solo retiro
-    else if (!['retiro', 'envio'].includes(info.delivery)) info.delivery = '';
     if (!embedded) document.body.style.overflow = 'hidden';
     drawLines(); layer.querySelector('.sf-drawer .sf-x').focus();
   };

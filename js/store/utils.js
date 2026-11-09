@@ -1,14 +1,23 @@
 /* Catálogo · utilidades compartidas (panel + página pública /c/<slug>) */
 const sfEsc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const sfArs = n => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n || 0);
-const SF_DEF = { bg: '#F8FAFC', accent: '#10B981', text: '#0F172A', title: '', description: '', banner: '', font: 'modern', radius: 'round', cols: 2, open: true, delivery: false,
+const SF_DEF = { bg: '#F8FAFC', accent: '#10B981', text: '#0F172A', title: '', description: '', banner: '', font: 'modern', radius: 'round', cols: 2, open: true, delivery: false, optPickup: true, optDelivery: null,
   pattern: 'none', patColor: '', patOpacity: 24, patAnimate: true, patSpeed: 2, headColor: '', priceColor: '', cardColor: '',
   cardStyle: 'solid', logoShape: 'rounded', heroAlign: 'left', addLabel: 'Agregar', footer: '',
   /* Imágenes propias (p. ej. hechas en Canva). Vacío = sin imagen. */
   bgImg: '', bgImgMode: 'cover', bgImgDim: 35, coverImg: '', coverDim: 30, promos: [] };
+/* Formas de entrega que ofrece el comercio. optDelivery sin definir (catálogos anteriores) hereda el interruptor viejo «delivery».
+   Si el dueño apaga las dos, queda «retiro» para que el pedido siempre tenga una forma de entrega. */
+function sfModes(t) {
+  const pickup = t.optPickup !== false, ship = t.optDelivery == null ? !!t.delivery : !!t.optDelivery;
+  const m = []; if (pickup) m.push('retiro'); if (ship) m.push('envio');
+  return m.length ? m : ['retiro'];
+}
 const SF_FONTS = { modern: '"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif', classic: 'Georgia,"Times New Roman",serif', tech: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace' };
 
 const sfSvg = (d, s = 18, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+/* Íconos de dos tonos (línea + relleno suave del color de acento) para las formas de entrega */
+const sfDuo = (body, s = 34) => `<svg width="${s}" height="${s}" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 const SF_ICON = {
   search: sfSvg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
   cart: sfSvg('<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 12.4a1.6 1.6 0 0 0 1.6 1.3h8.2a1.6 1.6 0 0 0 1.6-1.2L21 8H6"/>', 20),
@@ -21,6 +30,8 @@ const SF_ICON = {
   msg: sfSvg('<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>', 20),
   bag: sfSvg('<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>', 28, 1.8),
   home: sfSvg('<path d="m3 11 9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>', 28, 1.8),
+  store: sfDuo('<path d="M6.5 12h19l-1.5 13.2a2 2 0 0 1-2 1.8H10a2 2 0 0 1-2-1.8z" fill="currentColor" fill-opacity=".15"/><path d="M11.5 12v-2a4.5 4.5 0 0 1 9 0v2"/><path d="M12.8 17.2c.6 1.8 1.8 2.7 3.2 2.7s2.6-.9 3.2-2.7"/>'),
+  scooter: sfDuo('<rect x="2.5" y="9.5" width="9" height="7.5" rx="1.8" fill="currentColor" fill-opacity=".15"/><path d="M5 13.2h4"/><circle cx="8" cy="23.5" r="3.4" fill="currentColor" fill-opacity=".15"/><circle cx="25" cy="23.5" r="3.4" fill="currentColor" fill-opacity=".15"/><path d="M11.4 23.5H18c.9 0 1.6-.5 1.9-1.3l2.6-7.2h3.3"/><path d="M22.5 15l-.9-4.2h-3.2"/><path d="M13 17.5h6"/>'),
   filter: sfSvg('<path d="M3 5h18M6 12h12M10 19h4"/>'),
   pause: sfSvg('<path d="M8 5v14M16 5v14"/>', 16, 2.6),
   play: sfSvg('<path d="M7 4v16l13-8z"/>', 16, 2),

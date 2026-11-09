@@ -215,6 +215,10 @@ const VIEWS = {
                 ${B.textos}
                 <div class="field"><label>Tipografía</label>${seg('font', [['modern', 'Moderna'], ['classic', 'Clásica'], ['tech', 'Técnica']], t.font, 'seg3')}</div>
                 <label class="check"><input type="checkbox" name="open" ${t.open ? 'checked' : ''}>Mostrar badge "Abierto"</label><label class="check" style="margin-bottom:0"><input type="checkbox" name="delivery" ${t.delivery ? 'checked' : ''}>Mostrar badge "Envíos en el día"</label>`)}
+              ${card('Entrega del pedido', `<p class="hint" style="margin:0 0 10px">Es lo que el cliente elige antes de enviar el pedido. Podés desactivar una de las dos formas.</p>
+                <label class="check"><input type="checkbox" name="optPickup" ${sfModes(t).includes('retiro') && t.optPickup !== false ? 'checked' : ''}>Retiro en el local <small class="hint">· "Lo paso a buscar"</small></label>
+                <label class="check" style="margin-bottom:0"><input type="checkbox" name="optDelivery" ${sfModes(t).includes('envio') ? 'checked' : ''}>Envío a domicilio <small class="hint">· pide la dirección</small></label>
+                <p class="hint" style="margin:8px 0 0">Siempre queda activa al menos una: si apagás las dos, se mantiene el retiro.</p>`)}
             </div>
             <div class="sec" data-sec="imagenes">${B.media}</div>
             <div class="sec" data-sec="fondo">${B.fondo}</div>

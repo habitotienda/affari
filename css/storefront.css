@@ -348,7 +348,7 @@
 .sf-opt input{position:absolute;opacity:0;pointer-events:none}
 .sf-opt span{position:relative;display:grid;justify-items:center;gap:2px;height:100%;padding:12px 8px;text-align:center;border:1.5px solid var(--line);border-radius:calc(var(--r)*.6);background:var(--bg);transition:border-color .15s,background .15s,box-shadow .15s,transform .15s}
 .sf-opt:hover span{transform:translateY(-1px)}
-.sf-opt span svg{color:var(--ac);margin-bottom:2px}
+.sf-opt span svg{color:var(--ac);margin-bottom:2px;transition:transform .2s}.sf-opt input:checked+span svg{transform:scale(1.08)}
 .sf-opt b{font-size:13.5px;font-weight:800}.sf-opt small{font-size:11.5px;color:var(--mu)}
 .sf-opt input:checked+span{border-color:var(--ac);background:color-mix(in srgb,var(--ac) 12%,var(--bg));box-shadow:0 0 0 3px color-mix(in srgb,var(--ac) 22%,transparent)}
 .sf-opt input:checked+span::after{content:"";position:absolute;top:7px;right:7px;width:16px;height:16px;border-radius:50%;background:var(--ac) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E") center/10px no-repeat}

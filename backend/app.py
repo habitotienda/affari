@@ -32,7 +32,7 @@ DEFAULT_TPL = ("Hola {cliente}! Te escribimos de {negocio}. Tenés un saldo pend
                "¿Cuándo podés acercarte o transferirnos? ¡Gracias!")
 METHODS = ops.PAY_METHODS            # Efectivo, Transferencia, Tarjeta
 DEFAULT_THEME = {"bg": "#F8FAFC", "accent": "#10B981", "text": "#0F172A", "title": "", "description": "", "banner": "",
-                 "font": "modern", "radius": "round", "cols": 2, "open": True, "delivery": False,
+                 "font": "modern", "radius": "round", "cols": 2, "open": True, "delivery": False, "optPickup": True, "optDelivery": False,
                  # Editor visual (parte 3)
                  "pattern": "none", "patColor": "", "patOpacity": 24, "patAnimate": True,
                  "headColor": "", "priceColor": "", "cardColor": "",
@@ -73,6 +73,11 @@ def clean_theme(t, old=None):
     if t.get("cols") in (1, 2): o["cols"] = t["cols"]
     for k in ("open", "delivery", "patAnimate"):
         o[k] = bool(t.get(k, o[k]))
+    # Formas de entrega que ofrece el comercio. Siempre queda al menos una (si apaga las dos, se mantiene el retiro).
+    o["optPickup"] = bool(t.get("optPickup", True))
+    o["optDelivery"] = bool(t.get("optDelivery", False))
+    if not o["optPickup"] and not o["optDelivery"]:
+        o["optPickup"] = True
     # Colores opcionales: "" = automático
     for k in ("patColor", "headColor", "priceColor", "cardColor"):
         v = t.get(k)
@@ -121,7 +126,11 @@ def theme_view(theme, store_id):
 
 def parse_theme(raw):
     try:
-        return {**DEFAULT_THEME, **json.loads(raw or "{}")}
+        saved = json.loads(raw or "{}")
+        t = {**DEFAULT_THEME, **saved}
+        if "optDelivery" not in saved:        # catálogos anteriores: el envío seguía al interruptor viejo «delivery»
+            t["optDelivery"] = bool(saved.get("delivery"))
+        return t
     except ValueError:
         return dict(DEFAULT_THEME)
 
