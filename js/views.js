@@ -292,10 +292,10 @@ const VIEWS = {
   },
   async inventario(el) {
     const ps = await api('/products'), low = ps.filter(p => p.stock <= p.min_stock).length;
-    el.innerHTML = head('Inventario & Stock', `${ps.length} productos · ${low} con stock bajo`, `<button class="btn ai-pencil-btn" data-aiall title="Generar con IA la descripción de los productos que no tienen">${icon('edit', 16)}<span>Descripciones IA</span></button><button class="btn" data-stock>${icon('box')}Ingresar stock</button><button class="btn btn-primary" data-new>${icon('plus')}Nuevo producto</button>`) + `
+    el.innerHTML = head('Inventario & Stock', `${ps.length} productos · ${low} con stock bajo`, `<button class="btn ai-pencil-btn" data-aiall title="Generar con IA la descripción de los productos que no tienen">${icon('edit', 16)}<span>Descripciones IA</span></button><button class="btn" data-import>${icon('download')}Importar de Treinta</button><button class="btn" data-stock>${icon('box')}Ingresar stock</button><button class="btn btn-primary" data-new>${icon('plus')}Nuevo producto</button>`) + `
       <div class="card tbl-wrap">${ps.length ? `<table><thead><tr><th>Producto</th><th class="num">Costo</th><th class="num">Precio</th><th>Stock</th><th></th></tr></thead><tbody>${ps.map(p => `<tr><td><strong>${esc(p.name)}</strong>${p.active ? '' : ' <span class="pill-stock pill-off">Inactivo</span>'}</td><td class="num">${ars(p.cost)}</td><td class="num">${ars(p.price)}</td>
         <td><span class="pill-stock ${p.stock <= p.min_stock ? 'low' : ''}">${p.stock} u.</span></td><td><div class="act"><button class="btn btn-sm" data-in="${p.id}">+ Stock</button><button class="btn btn-sm" data-edit="${p.id}">Editar</button></div></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Todavía no cargaste productos.</div>'}</div>`;
-    el.querySelector('[data-stock]').onclick = () => openStockModal(); el.querySelector('[data-new]').onclick = () => openProductModal();
+    el.querySelector('[data-import]').onclick = () => openTreintaImport(); el.querySelector('[data-stock]').onclick = () => openStockModal(); el.querySelector('[data-new]').onclick = () => openProductModal();
     el.querySelector('[data-aiall]').onclick = e => fillMissingDescriptions(ps, e.currentTarget);
     el.querySelectorAll('[data-in]').forEach(b => b.onclick = () => openStockModal(+b.dataset.in));
     el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openProductModal(ps.find(p => p.id == b.dataset.edit)));

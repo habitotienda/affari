@@ -138,3 +138,14 @@
 .crop-sel i[data-h=e]{left:100%;top:50%;cursor:ew-resize}.crop-sel i[data-h=se]{left:100%;top:100%;cursor:nwse-resize}.crop-sel i[data-h=s]{left:50%;top:100%;cursor:ns-resize}
 .crop-sel i[data-h=sw]{left:0;top:100%;cursor:nesw-resize}.crop-sel i[data-h=w]{left:0;top:50%;cursor:ew-resize}
 .crop-hint{margin:0;text-align:center}.crop-foot{display:flex;justify-content:flex-end;gap:8px}
+
+/* ===== Importador de Treinta ===== */
+.tz-load{display:flex;align-items:center;gap:12px;justify-content:center;padding:28px 8px;color:var(--muted);font-weight:600}
+.tz-spin{width:22px;height:22px;border:3px solid var(--border);border-top-color:var(--primary-2);border-radius:50%;animation:tz-rot .8s linear infinite;flex:none}
+@keyframes tz-rot{to{transform:rotate(360deg)}}
+.tz-sum{margin:0 0 10px}.tz-tbl{max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px}
+.tz-tbl table{min-width:480px}.tz-tbl thead th{position:sticky;top:0;background:var(--card);z-index:1}
+.tz-th{display:block;width:40px;height:40px;border-radius:6px;object-fit:cover;background:var(--bg);border:1px solid var(--border)}
+.tz-in{width:100%;min-width:90px;border:1px solid transparent;border-radius:6px;padding:6px 8px;background:transparent;font:inherit;outline:0}
+.tz-in:hover{border-color:var(--border)}.tz-in:focus{border-color:var(--primary-2);background:var(--card)}.tz-num{width:96px;text-align:right}
+@media(prefers-reduced-motion:reduce){.tz-spin{animation-duration:2.4s}}

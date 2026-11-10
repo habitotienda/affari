@@ -11,3 +11,5 @@ google-auth>=2.29        # verifica el ID token de «Continuar con Google»
 requests>=2.31           # transporte que usa google-auth para bajar las claves públicas
 gunicorn>=22.0           # servidor de producción (con workers de uvicorn, porque Affari es FastAPI/ASGI)
 tzdata>=2024.1           # base de zonas horarias (Windows no la trae); la usan los horarios de atención
+beautifulsoup4>=4.12   # importador de catálogo de Treinta
+Pillow>=10.0           # reduce las fotos importadas

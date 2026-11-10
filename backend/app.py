@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import database as db
 import auth_handler as auth
-import reports, exporters, operations as ops, ai_agent, hours as hrs, google_auth, billing
+import reports, exporters, operations as ops, ai_agent, hours as hrs, google_auth, billing, treinta_import
 
 load_dotenv()
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -580,6 +580,7 @@ app.include_router(google_auth.make_router(load_user, public_user))   # inicio d
 app.include_router(ops.make_router(current_user))     # parte 5: variantes, proveedores, deudas, caja, comprobantes
 app.include_router(billing.make_router(current_user, forget_user, db))   # planes, checkout y webhook de Mercado Pago
 app.include_router(ai_agent.make_router(current_user))  # asistente IA (Gemini)
+app.include_router(treinta_import.make_router(current_user))  # importar catálogo desde Treinta
 
 # Archivos estáticos: solo carpetas públicas (nunca la raíz, para no exponer backend/ ni .env)
 for folder in ("css", "js", "assets"):
