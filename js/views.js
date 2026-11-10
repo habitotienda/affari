@@ -112,15 +112,92 @@ function imgToData(file, max, type = 'image/jpeg', quality = .78) {
   });
 }
 
+/* Recortador de fotos (capturas, fotos con bordes sobrantes…). Devuelve un data URL JPEG recortado o null si se cancela. */
+function openCropper(src, max = 800) {
+  return new Promise(resolve => {
+    const ov = document.createElement('div'); ov.className = 'crop-ov';
+    const ratios = [['', 'Libre'], ['1', '1:1'], ['1.3333', '4:3'], ['0.75', '3:4'], ['1.7778', '16:9']];
+    ov.innerHTML = `<div class="crop-box" role="dialog" aria-modal="true" aria-label="Recortar foto">
+      <div class="crop-head"><h2>Recortar foto</h2><div class="crop-ratios" role="group" aria-label="Proporción">${ratios.map(([r, l], i) => `<button type="button" data-r="${r}" aria-pressed="${i === 0}">${l}</button>`).join('')}</div></div>
+      <div class="crop-stage" data-stage><img data-img alt="Foto a recortar" draggable="false">
+        <div class="crop-sel" data-sel hidden>${['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(h => `<i data-h="${h}"></i>`).join('')}</div></div>
+      <p class="hint crop-hint">Arrastrá el recuadro o sus bordes para elegir qué parte queda.</p>
+      <div class="crop-foot"><button type="button" class="btn" data-cancel>Cancelar</button><button type="button" class="btn btn-primary" data-ok disabled>Usar recorte</button></div></div>`;
+    const $ = k => ov.querySelector(k), img = $('[data-img]'), sel = $('[data-sel]'), ok = $('[data-ok]');
+    const MIN = 40; let W = 0, H = 0, ratio = 0, R = { x: 0, y: 0, w: 0, h: 0 }, drag = null;
+    const clamp = (v, a, b) => Math.min(Math.max(v, a), Math.max(a, b));
+    const paint = () => { sel.style.left = R.x + 'px'; sel.style.top = R.y + 'px'; sel.style.width = R.w + 'px'; sel.style.height = R.h + 'px'; };
+    const fitRatio = () => {                         // acomoda el recuadro actual a la proporción elegida, centrado
+      if (!ratio) return;
+      const cx = R.x + R.w / 2, cy = R.y + R.h / 2; let w = R.w, h = w / ratio;
+      if (h > H) { h = H; w = h * ratio; } if (w > W) { w = W; h = w / ratio; }
+      R = { w, h, x: clamp(cx - w / 2, 0, W - w), y: clamp(cy - h / 2, 0, H - h) };
+    };
+    const start = () => {
+      W = img.clientWidth; H = img.clientHeight; if (!W || !H) return;
+      const w = W * .86, h = H * .86; R = { x: (W - w) / 2, y: (H - h) / 2, w, h }; fitRatio(); paint(); sel.hidden = false; ok.disabled = false;
+    };
+    const close = v => { document.removeEventListener('keydown', onKey, true); window.removeEventListener('resize', onResize); ov.remove(); resolve(v); };
+    const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(null); } };
+    const onResize = () => { const k = img.clientWidth / (W || 1); if (!W || !img.clientWidth) return; R = { x: R.x * k, y: R.y * k, w: R.w * k, h: R.h * k }; W = img.clientWidth; H = img.clientHeight; paint(); };
+    document.addEventListener('keydown', onKey, true); window.addEventListener('resize', onResize);
+
+    ov.addEventListener('pointerdown', e => {
+      const hd = e.target.closest('[data-h]'), inSel = e.target.closest('[data-sel]'); if (!inSel) return;
+      e.preventDefault(); drag = { h: hd ? hd.dataset.h : 'move', x0: e.clientX, y0: e.clientY, R0: { ...R } }; sel.setPointerCapture(e.pointerId);
+    });
+    sel.addEventListener('pointermove', e => {
+      if (!drag) return; const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0, { R0, h: hd } = drag;
+      if (hd === 'move') { R = { ...R0, x: clamp(R0.x + dx, 0, W - R0.w), y: clamp(R0.y + dy, 0, H - R0.h) }; return paint(); }
+      let x = R0.x, y = R0.y, x2 = x + R0.w, y2 = y + R0.h;
+      if (hd.includes('w')) x = clamp(x + dx, 0, x2 - MIN);
+      if (hd.includes('e')) x2 = clamp(x2 + dx, x + MIN, W);
+      if (hd.includes('n')) y = clamp(y + dy, 0, y2 - MIN);
+      if (hd.includes('s')) y2 = clamp(y2 + dy, y + MIN, H);
+      let w = x2 - x, h = y2 - y;
+      if (ratio) {
+        if (hd === 'n' || hd === 's') w = h * ratio; else h = w / ratio;
+        const aw = hd.includes('w') ? R0.x + R0.w : W - R0.x, ah = hd.includes('n') ? R0.y + R0.h : H - R0.y;
+        if (w > aw) { w = aw; h = w / ratio; } if (h > ah) { h = ah; w = h * ratio; }
+        x = hd.includes('w') ? R0.x + R0.w - w : R0.x; y = hd.includes('n') ? R0.y + R0.h - h : R0.y;
+      }
+      R = { x, y, w, h }; paint();
+    });
+    const end = () => { drag = null; }; sel.addEventListener('pointerup', end); sel.addEventListener('pointercancel', end);
+
+    $('.crop-ratios').onclick = e => {
+      const b = e.target.closest('[data-r]'); if (!b || sel.hidden) return;
+      ratio = Number(b.dataset.r) || 0; ov.querySelectorAll('[data-r]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); fitRatio(); paint();
+    };
+    $('[data-cancel]').onclick = () => close(null);
+    ov.addEventListener('mousedown', e => { if (e.target === ov) close(null); });
+    ok.onclick = () => {
+      try {
+        const k = img.naturalWidth / W, sw = Math.max(1, Math.round(R.w * k)), sh = Math.max(1, Math.round(R.h * k)), f = Math.min(1, max / Math.max(sw, sh));
+        const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(sw * f)); c.height = Math.max(1, Math.round(sh * f));
+        const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+        x.drawImage(img, Math.round(R.x * k), Math.round(R.y * k), sw, sh, 0, 0, c.width, c.height);
+        let out = ''; for (const q of [.85, .72, .6, .5]) { out = c.toDataURL('image/jpeg', q); if (out.length < 420000) break; }
+        close(out);
+      } catch (err) { toast('No se pudo recortar esta foto. Probá subirla de nuevo.'); close(null); }
+    };
+    img.onload = () => requestAnimationFrame(start);
+    img.onerror = () => { toast('No se pudo abrir la foto para recortarla.'); close(null); };
+    img.src = src;
+    document.body.appendChild(ov); ok.focus({ preventScroll: true });
+  });
+}
+
 async function openProductModal(p) {
   const all = await api('/products'), cats = [...new Set(all.map(x => x.category).filter(Boolean))];
   let imgs = [...(p?.images || [])];
+  const orig = new Map();   // foto subida (ya reducida) → versión más grande en memoria, para recortar sin perder calidad
   const v = k => esc(p ? p[k] : '');
   const { form } = openModal({ title: p ? 'Editar producto' : 'Nuevo producto', wide: true,
     html: fld('Nombre', `<input id="pn" required value="${v('name')}" placeholder="Ej: Yerba mate 1kg">`, 'pn') +
       fld('Categoría', `<input id="pk" list="pkl" autocomplete="off" maxlength="40" value="${v('category')}" placeholder="Ej: Almacén, Bebidas…"><datalist id="pkl">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist>`, 'pk') +
-      `<div class="field"><label for="pd">Descripción</label><textarea id="pd" placeholder="Detalle que verá el cliente en el catálogo">${v('description')}</textarea></div>
-      <div class="field"><label>Fotos del producto (hasta 5)</label><div class="gal-ed" data-gal></div><input id="pimg" type="file" accept="image/*" multiple hidden><small class="hint">La primera es la principal. Se optimizan automáticamente.</small></div>
+      `<div class="field"><div class="label-row"><label for="pd">Descripción</label><button type="button" class="ai-pencil" data-aidesc title="Generar descripción con IA a partir del nombre y la foto" aria-label="Generar descripción con IA">${icon('edit', 16)}</button></div><textarea id="pd" placeholder="Detalle que verá el cliente en el catálogo">${v('description')}</textarea></div>
+      <div class="field"><label>Fotos del producto (hasta 5)</label><div class="gal-ed" data-gal></div><input id="pimg" type="file" accept="image/*" multiple hidden><small class="hint">La primera es la principal. Se optimizan automáticamente. Usá ✂ para recortar capturas.</small></div>
       <div class="row2">${fld('Precio de venta', `<input id="pp" type="number" min="0" step="any" required value="${p ? p.price : ''}">`, 'pp')}${fld('Costo', `<input id="pc" type="number" min="0" step="any" value="${p ? p.cost : 0}">`, 'pc')}
       ${fld('Stock', `<input id="ps" type="number" min="0" required value="${p ? p.stock : 0}" ${p && (p.variants || []).length ? 'disabled title="Se calcula con las variantes"' : ''}>`, 'ps')}${fld('Alerta de stock bajo', `<input id="pm" type="number" min="0" value="${p ? p.min_stock : 5}">`, 'pm')}</div>
       <label class="check"><input id="pa" type="checkbox" ${!p || p.active ? 'checked' : ''}>Activo (visible en el catálogo público)</label>`,
@@ -129,18 +206,49 @@ async function openProductModal(p) {
         stock: Math.round(Number(f.querySelector('#ps').value)), min_stock: Math.round(Number(f.querySelector('#pm').value)) || 0, active: f.querySelector('#pa').checked, images: imgs };
       await api(p ? `/products/${p.id}` : '/products', { method: p ? 'PUT' : 'POST', body }); await done(close, p ? 'Producto actualizado' : 'Producto creado');
     } });
+  const pd = form.querySelector('#pd'), pen = form.querySelector('[data-aidesc]');
+  pen.onclick = async () => {
+    const name = form.querySelector('#pn').value.trim();
+    if (!name) { toast('Escribí primero el nombre del producto'); form.querySelector('#pn').focus(); return; }
+    if (pd.value.trim() && !confirm('Ya hay una descripción. ¿Reemplazarla por una generada con IA?')) return;
+    pen.disabled = true; pen.classList.add('busy');
+    try {
+      const r = await api('/ai/describe', { method: 'POST', body: { name, category: form.querySelector('#pk').value.trim(), image: imgs[0] || '', product_id: p ? p.id : null } });
+      pd.value = r.description; pd.focus(); toast('Descripción generada. Revisala antes de guardar.');
+    } catch (err) { toast(err.message); }
+    finally { pen.disabled = false; pen.classList.remove('busy'); }
+  };
   const gal = form.querySelector('[data-gal]'), input = form.querySelector('#pimg');
-  const drawGal = () => { gal.innerHTML = imgs.map((s, i) => `<div class="gal-it"><img src="${s}" alt="Foto ${i + 1}"><button type="button" data-rm="${i}" aria-label="Quitar foto">×</button>${i ? `<button type="button" class="mk" data-main="${i}">Principal</button>` : '<em>Principal</em>'}</div>`).join('') + (imgs.length < 5 ? '<label class="gal-add" for="pimg" title="Agregar foto">+</label>' : ''); };
+  const drawGal = () => { gal.innerHTML = imgs.map((s, i) => `<div class="gal-it"><img src="${s}" alt="Foto ${i + 1}"><button type="button" data-rm="${i}" aria-label="Quitar foto">×</button><button type="button" class="gal-crop" data-crop="${i}" aria-label="Recortar foto ${i + 1}" title="Recortar">${icon('crop', 12)}</button>${i ? `<button type="button" class="mk" data-main="${i}">Principal</button>` : '<em>Principal</em>'}</div>`).join('') + (imgs.length < 5 ? '<label class="gal-add" for="pimg" title="Agregar foto">+</label>' : ''); };
   gal.onclick = e => {
-    const rm = e.target.closest('[data-rm]'), mk = e.target.closest('[data-main]');
+    const rm = e.target.closest('[data-rm]'), mk = e.target.closest('[data-main]'), cr = e.target.closest('[data-crop]');
+    if (cr) { const i = +cr.dataset.crop; openCropper(orig.get(imgs[i]) || imgs[i]).then(out => { if (out) { imgs[i] = out; drawGal(); toast('Foto recortada'); } }); return; }
     if (rm) imgs.splice(+rm.dataset.rm, 1); else if (mk) imgs.unshift(...imgs.splice(+mk.dataset.main, 1)); else return; drawGal();
   };
   input.onchange = async () => {
     const files = [...input.files].slice(0, 5 - imgs.length); input.value = '';
-    for (const f of files) { try { imgs.push(await imgToData(f, 800)); } catch (err) { toast(err.message); } }
+    for (const f of files) { try { const small = await imgToData(f, 800); imgs.push(small); orig.set(small, await imgToData(f, 1600, 'image/jpeg', .9)); } catch (err) { toast(err.message); } }
     drawGal();
   };
   drawGal();
+}
+
+/* Lápiz del Inventario: genera con IA la descripción de todos los productos que no tienen (uno por uno, con progreso) */
+async function fillMissingDescriptions(ps, btn) {
+  const todo = ps.filter(p => !String(p.description || '').trim());
+  if (!todo.length) return toast('Todos tus productos ya tienen descripción');
+  if (!confirm(`Se generarán con IA las descripciones de ${todo.length} producto${todo.length === 1 ? '' : 's'} que no tienen. Las que ya escribiste no se tocan. ¿Continuar?`)) return;
+  const label = btn.innerHTML; btn.disabled = true; btn.classList.add('busy');
+  let ok = 0, fail = 0, stop = '';
+  for (const [i, p] of todo.entries()) {
+    btn.innerHTML = `${icon('edit', 16)}<span>${i + 1} de ${todo.length}…</span>`;
+    try { await httpRequest('/ai/describe', { method: 'POST', body: { product_id: p.id, save_if_empty: true }, timeout: 60000 }); ok++; }
+    catch (err) { fail++; if (err.status === 429 || err.status === 402) { stop = err.message; break; } }
+  }
+  btn.innerHTML = label; btn.disabled = false; btn.classList.remove('busy');
+  DataStore.invalidate();
+  toast(`${ok} descripcion${ok === 1 ? '' : 'es'} generada${ok === 1 ? '' : 's'}${fail ? ` · ${fail} sin resolver` : ''}${stop ? '. ' + stop : ''}`);
+  await refresh();
 }
 
 /* Recordatorio de cobro: enlace wa.me con el mensaje exacto y el saldo del cliente */
@@ -184,10 +292,11 @@ const VIEWS = {
   },
   async inventario(el) {
     const ps = await api('/products'), low = ps.filter(p => p.stock <= p.min_stock).length;
-    el.innerHTML = head('Inventario & Stock', `${ps.length} productos · ${low} con stock bajo`, `<button class="btn" data-stock>${icon('box')}Ingresar stock</button><button class="btn btn-primary" data-new>${icon('plus')}Nuevo producto</button>`) + `
+    el.innerHTML = head('Inventario & Stock', `${ps.length} productos · ${low} con stock bajo`, `<button class="btn ai-pencil-btn" data-aiall title="Generar con IA la descripción de los productos que no tienen">${icon('edit', 16)}<span>Descripciones IA</span></button><button class="btn" data-stock>${icon('box')}Ingresar stock</button><button class="btn btn-primary" data-new>${icon('plus')}Nuevo producto</button>`) + `
       <div class="card tbl-wrap">${ps.length ? `<table><thead><tr><th>Producto</th><th class="num">Costo</th><th class="num">Precio</th><th>Stock</th><th></th></tr></thead><tbody>${ps.map(p => `<tr><td><strong>${esc(p.name)}</strong>${p.active ? '' : ' <span class="pill-stock pill-off">Inactivo</span>'}</td><td class="num">${ars(p.cost)}</td><td class="num">${ars(p.price)}</td>
         <td><span class="pill-stock ${p.stock <= p.min_stock ? 'low' : ''}">${p.stock} u.</span></td><td><div class="act"><button class="btn btn-sm" data-in="${p.id}">+ Stock</button><button class="btn btn-sm" data-edit="${p.id}">Editar</button></div></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Todavía no cargaste productos.</div>'}</div>`;
     el.querySelector('[data-stock]').onclick = () => openStockModal(); el.querySelector('[data-new]').onclick = () => openProductModal();
+    el.querySelector('[data-aiall]').onclick = e => fillMissingDescriptions(ps, e.currentTarget);
     el.querySelectorAll('[data-in]').forEach(b => b.onclick = () => openStockModal(+b.dataset.in));
     el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openProductModal(ps.find(p => p.id == b.dataset.edit)));
   },

@@ -317,10 +317,46 @@ def converse(u, text, images):
         c.execute("DELETE FROM ai_messages WHERE store_id=? AND id NOT IN (SELECT id FROM ai_messages WHERE store_id=? ORDER BY id DESC LIMIT 200)", (sid, sid))
     return reply, actions
 
+
+# ---------------------------------------------------------------- descripciones automáticas (lápiz celeste)
+DESC_SYSTEM = """Sos redactor de fichas de producto para el catálogo online de «{business}» ({btype}), un comercio de Argentina.
+Escribís en español rioplatense, con tono cálido y comercial.
+Tarea: con el nombre del producto (y la foto, si hay) escribí una descripción de 1 a 3 frases, de 280 caracteres como máximo.
+Reglas: describí solo lo que se ve en la foto o se deduce del nombre (tipo de producto, color, material visible, uso). NUNCA inventes medidas, marcas, ingredientes, composición, precios ni promesas.
+Sin emojis, sin comillas, sin títulos ni listas. Respondé únicamente con el texto de la descripción."""
+IMG_LOCAL = re.compile(r"^/api/img/(\d+)/(\d+)\?v=[0-9a-f]{0,12}$")
+
+def _clean_desc(text):
+    t = re.sub(r"\s+", " ", text or "").strip().strip("\"'«»“”").strip()
+    if len(t) > 300:
+        cut = t[:300]
+        end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+        t = cut[:end + 1] if end > 120 else cut.rstrip() + "…"
+    return t
+
+def describe_product(u, name, category, image, keys):
+    """Pide a Gemini una descripción comercial a partir del nombre y (opcional) una foto data URL."""
+    system = DESC_SYSTEM.format(business=u["business"], btype=u["business_type"])
+    parts = [{"text": f"Producto: {name}" + (f"\nCategoría: {category}" if category else "")}]
+    if image:
+        mime, b64 = _for_model(image)[5:].split(";base64,", 1)
+        parts.append({"inlineData": {"mimeType": mime, "data": b64}})
+    res, _src = gk.generate([{"role": "user", "parts": parts}], system, None, keys, {"maxOutputTokens": 600})
+    cand = (res.get("candidates") or [{}])[0]
+    text = _clean_desc("".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts") or [] if not p.get("thought")))
+    if not text:
+        raise HTTPException(502, "La IA no pudo describir este producto. Probá de nuevo o escribila a mano.")
+    return text
+
 # ---------------------------------------------------------------- API
 class ChatIn(BaseModel):
     message: str = ""
     images: list[str] = []
+
+class DescribeIn(BaseModel):
+    name: str = ""; category: str = ""; image: str = ""
+    product_id: Optional[int] = None
+    save_if_empty: bool = False      # guarda la descripción en el producto, solo si todavía no tiene una
 
 class KeyIn(BaseModel):
     key: str; label: str = ""
@@ -357,6 +393,47 @@ def make_router(current_user):
             log.warning("Gemini: %s %s", e.kind, e)
             raise HTTPException(502, "El servicio de IA no respondió. Probá de nuevo en un momento.")
         return {"reply": reply, "actions": actions}
+
+    @R.post("/describe")
+    def describe(d: DescribeIn, u=Depends(current_user)):
+        sid, name, cat, image = u["store_id"], d.name.strip()[:120], d.category.strip()[:40], d.image.strip()
+        stored = []
+        if d.product_id is not None:
+            with db.conn() as c:
+                r = c.execute("SELECT name,category,images FROM products WHERE id=? AND store_id=?", (d.product_id, sid)).fetchone()
+            if not r:
+                raise HTTPException(404, "Producto inexistente.")
+            name, cat = name or r["name"], cat or r["category"] or ""
+            try: stored = json.loads(r["images"] or "[]")
+            except ValueError: stored = []
+            if not image and stored:
+                image = stored[0]
+        m = IMG_LOCAL.match(image)                       # foto que el formulario ya tenía guardada: se toma de la base
+        if m:
+            image = stored[int(m.group(2))] if d.product_id is not None and int(m.group(1)) == d.product_id and int(m.group(2)) < len(stored) else ""
+        if image and (len(image) > 600_000 or not IMG.match(image)):
+            image = ""                                   # foto inválida o muy pesada: se describe solo por el nombre
+        if not name:
+            raise HTTPException(400, "Escribí primero el nombre del producto.")
+        if not rate_ok(("describe", sid), limit=80, window=600):
+            raise HTTPException(429, "Vas muy rápido: esperá unos minutos antes de generar más descripciones.")
+        with db.conn() as c:
+            keys = own_keys(c, sid)
+        try:
+            text = describe_product(u, name, cat, image, keys)
+        except gk.AllKeysExhausted:
+            raise HTTPException(429, "Se agotó la cuota de IA. Agregá tu propia clave gratuita de Gemini en Asistente IA → Claves de IA.")
+        except gk.GeminiError as e:
+            log.warning("Gemini (describe): %s %s", e.kind, e)
+            if e.kind == "quota":
+                raise HTTPException(429, "Se agotó la cuota de IA por ahora. Probá en unos minutos o agregá tu clave en Asistente IA.")
+            raise HTTPException(502, "El servicio de IA no respondió. Probá de nuevo en un momento.")
+        saved = False
+        if d.save_if_empty and d.product_id is not None:
+            with db.conn() as c:
+                saved = c.execute("UPDATE products SET description=? WHERE id=? AND store_id=? AND trim(coalesce(description,''))=''",
+                                  (text, d.product_id, sid)).rowcount > 0
+        return {"description": text, "saved": saved}
 
     @R.get("/history")
     def history(u=Depends(current_user)):
