@@ -9,7 +9,7 @@ VIEWS.inventario = async function (el) {
   const cost = ps.reduce((s, p) => s + (p.variants.length ? p.variants.reduce((t, v) => t + v.stock * (v.cost || p.cost), 0) : p.stock * p.cost), 0);
   const retail = ps.reduce((s, p) => s + (p.variants.length ? p.variants.reduce((t, v) => t + v.stock * (v.price || p.price), 0) : p.stock * p.price), 0);
   const only = state.invLow ? 'low' : 'all';
-  el.innerHTML = head('Inventario & Stock', `${ps.length} productos · ${units} unidades`, `<button class="btn" data-stock>${icon('box')}Ingresar stock</button><button class="btn btn-primary" data-new>${icon('plus')}Nuevo producto</button>`) + `
+  el.innerHTML = head('Inventario & Stock', `${ps.length} productos · ${units} unidades`, `<button class="btn ai-pencil-btn" data-aiall title="Generar con IA la descripción de los productos que no tienen">${icon('edit', 16)}<span>Descripciones IA</span></button><button class="btn" data-import>${icon('download')}Importar de Treinta</button><button class="btn" data-stock>${icon('box')}Ingresar stock</button><button class="btn btn-primary" data-new>${icon('plus')}Nuevo producto</button>`) + `
     <section class="kpis"><div class="card kpi ${lowN ? 'alert-k' : ''}"><span>${lowN ? '⚠ ' : ''}Stock bajo</span><strong>${lowN}</strong><small>${lowN ? 'Reponelos para no perder ventas' : 'Todo el stock está en orden'}</small></div>
       <div class="card kpi"><span>Productos</span><strong>${ps.length}</strong><small>${ps.filter(p => p.variants.length).length} con variantes</small></div>
       <div class="card kpi"><span>Valor a costo</span><strong>${ars(cost)}</strong><small>Lo que invertiste en mercadería</small></div>
@@ -34,6 +34,7 @@ VIEWS.inventario = async function (el) {
   };
   const q = el.querySelector('[data-q]'); q.value = state.iq || ''; q.oninput = () => { state.iq = q.value; draw(); };
   el.querySelectorAll('[name=invf]').forEach(r => r.onchange = () => { state.invLow = r.value === 'low'; draw(); });
+  el.querySelector('[data-import]').onclick = () => openTreintaImport(); el.querySelector('[data-aiall]').onclick = e => fillMissingDescriptions(ps, e.currentTarget);
   el.querySelector('[data-stock]').onclick = () => openStockModal(); el.querySelector('[data-new]').onclick = () => openProductModal(); draw();
 };
 
