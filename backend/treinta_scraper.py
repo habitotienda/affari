@@ -26,6 +26,8 @@ MAX_HTML = 4_000_000                 # bytes
 MAX_IMG = 6_000_000
 MAX_PRODUCTS = 500
 MAX_REDIRECTS = 3
+MAX_PAGES = 30                       # páginas extra que se piden como máximo
+MAX_SECONDS = 40                     # tiempo total de la paginación
 MAX_IMGS_PER_PRODUCT = 3
 NAME_MAX, DESC_MAX, CAT_MAX = 120, 600, 40      # mismos límites que el resto de Affari
 
@@ -216,20 +218,51 @@ def _as_product(d, base):
             "stock": _stock(_ci(d, STOCK_K)), "cost": 0.0}       # costo: dato privado, no está en la tienda pública
 
 
-def walk_products(node, base, out, depth=0):
-    """Recorre cualquier JSON y junta los dicts que parecen productos (nombre + precio)."""
+CATID_K = ("categoryid", "category_id", "categoriaid", "categoria_id", "collectionid", "collection_id", "sectionid")
+LIST_K = ("products", "productos", "items", "data", "results")
+
+
+def _category_map(node, out, depth=0):
+    """id → nombre de categoría, buscando listas llamadas categories/categorias/collections con {id, name}."""
+    if depth > 60:
+        return
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if str(k).lower() in ("categories", "categorias", "collections", "colecciones", "sections", "secciones", "tabs") and isinstance(v, list):
+                for c in v:
+                    if isinstance(c, dict):
+                        cid, nm = _ci(c, ("id", "_id", "uuid", "slug")), _text(_ci(c, ("name", "nombre", "title", "label")), CAT_MAX)
+                        if cid is not None and nm:
+                            out[str(cid)] = nm
+            _category_map(v, out, depth + 1)
+    elif isinstance(node, list):
+        for v in node:
+            _category_map(v, out, depth + 1)
+
+
+def walk_products(node, base, out, depth=0, cat="", cats=None):
+    """Recorre cualquier JSON y junta los dicts que parecen productos (nombre + precio).
+    La categoría sale del propio producto, de su categoryId (mapa `cats`) o del contenedor que lo agrupa
+    (p. ej. {"name": "Bebidas", "products": [...]})."""
     if depth > 60 or len(out) >= MAX_PRODUCTS:
         return
     if isinstance(node, dict):
         p = _as_product(node, base)
         if p:
+            if not p["category"]:
+                cid = _ci(node, CATID_K)
+                p["category"] = (cats or {}).get(str(cid), "") if cid is not None else ""
+            if not p["category"]:
+                p["category"] = cat
             out.append(p)            # no bajamos: las variantes/ofertas internas no son productos aparte
             return
+        own = _text(_ci(node, ("categoryname", "category_name", "categoria", "category", "label", "title", "name", "nombre")), CAT_MAX) \
+            if any(isinstance(node.get(k), list) for k in LIST_K) else ""
         for v in node.values():
-            walk_products(v, base, out, depth + 1)
+            walk_products(v, base, out, depth + 1, own or cat, cats)
     elif isinstance(node, list):
         for v in node:
-            walk_products(v, base, out, depth + 1)
+            walk_products(v, base, out, depth + 1, cat, cats)
 
 
 def _dedupe(items):
@@ -342,18 +375,77 @@ def _store_name(soup):
 def extract_products(html, base_url):
     """HTML → (nombre_tienda, [productos]). Función pura: sirve también para probar con HTML guardado."""
     soup = BeautifulSoup(html, "html.parser")
-    found, blobs = [], 0
-    for blob in _json_from_scripts(soup):
-        blobs += 1
-        walk_products(blob, base_url, found)
-    for blob in _flight_json(soup):
-        blobs += 1
-        walk_products(blob, base_url, found)
+    blobs = list(_json_from_scripts(soup)) + list(_flight_json(soup))
+    cats = {}
+    for b in blobs:
+        _category_map(b, cats)
+    found = []
+    for b in blobs:
+        walk_products(b, base_url, found, cats=cats)
     products = _dedupe(found + _cards(soup, base_url))      # tarjetas completan lo que flight data no traiga
     if not products:
         products = _dedupe(_microdata(soup, base_url))
-    log.info("treinta: %s blobs JSON, %s productos", blobs, len(products))
+    log.info("treinta: %s blobs JSON, %s productos, %s categorías", len(blobs), len(products), len(cats))
     return _store_name(soup), products
+
+
+def _merge(a, b):
+    """Suma productos nuevos (por nombre+precio) y completa la categoría/foto faltante de los repetidos."""
+    idx = {(p["name"].lower(), p["price"]): p for p in a}
+    for p in b:
+        k = (p["name"].lower(), p["price"])
+        if k in idx:
+            for f in ("category", "description", "image"):
+                if not idx[k][f] and p[f]:
+                    idx[k][f] = p[f]
+            if not idx[k]["images"] and p["images"]:
+                idx[k]["images"] = p["images"]
+        else:
+            idx[k] = p; a.append(p)
+    return a[:MAX_PRODUCTS]
+
+
+def _next_pages(html, url):
+    """Links de paginación reales de la página (rel=next, ?page=N, ?pagina=N) dentro del mismo sitio."""
+    soup, host, out = BeautifulSoup(html, "html.parser"), urlparse(url).hostname, []
+    for a in soup.select('a[rel~="next"], link[rel~="next"], a[href*="page="], a[href*="pagina="], a[href*="p="]'):
+        u = urljoin(url, a.get("href") or "")
+        q = parse_qs(urlparse(u).query)
+        if urlparse(u).hostname == host and any(k in q for k in ("page", "pagina", "p")) and u not in out:
+            out.append(u)
+    return out
+
+
+def _paginate(url, html, products):
+    """Pide las páginas siguientes mientras aporten productos nuevos: primero los links que declara la página,
+    después ?page=2, 3… (con tope de páginas y de tiempo, para no colgar la importación)."""
+    import time
+    t0, seen, queue = time.monotonic(), {url}, _next_pages(html, url)
+    n, empty = 1, 0
+    while len(products) < MAX_PRODUCTS and n < MAX_PAGES and time.monotonic() - t0 < MAX_SECONDS:
+        if queue:
+            nxt = queue.pop(0)
+        else:
+            sep = "&" if "?" in url else "?"
+            nxt = f"{url}{sep}page={n + 1}"
+        if nxt in seen:
+            n += 1; continue
+        seen.add(nxt); n += 1
+        try:
+            body, resp = _get(nxt, check_host=True, accept="text/html,application/xhtml+xml", max_bytes=MAX_HTML)
+        except ScrapeError:
+            break
+        page = body.decode(resp.encoding or resp.apparent_encoding or "utf-8", errors="replace")
+        before = len(products)
+        _, more = extract_products(page, resp.url or nxt)
+        _merge(products, more)
+        for u in _next_pages(page, resp.url or nxt):
+            if u not in seen and u not in queue:
+                queue.append(u)
+        empty = 0 if len(products) > before else empty + 1
+        if empty >= 1 and not queue:          # una página sin nada nuevo y sin más links: se terminó (o el sitio ignora ?page=)
+            break
+    return products
 
 
 def scrape_store(raw_url):
@@ -362,6 +454,8 @@ def scrape_store(raw_url):
     body, resp = _get(url, check_host=True, accept="text/html,application/xhtml+xml", max_bytes=MAX_HTML)
     html = body.decode(resp.encoding or resp.apparent_encoding or "utf-8", errors="replace")
     store, products = extract_products(html, resp.url or url)
+    if products:
+        products = _paginate(resp.url or url, html, products)
     if not products:
         raise ScrapeError("no_products",
                           "No encontramos productos en esa página. Verificá que sea el link del catálogo (no de la página principal) "
