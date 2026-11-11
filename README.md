@@ -19,9 +19,9 @@ Si al conectar da «Network is unreachable», tu red no tiene IPv6: en Supabase 
 Todas las tablas se crean con RLS activado (sin políticas): la API pública de Supabase no puede leerlas; solo este backend (rol `postgres`).
 
 ## Asistente IA (menú «Asistente IA»)
-Chat con Gemini que, mediante herramientas limitadas a tu negocio, puede: **cargar productos** (nombre + stock → arma la descripción y categoría; con fotos adjuntas las mira y las guarda en el producto; también agrega o **reemplaza** las fotos de un producto existente), **editar productos**, **ingresar / descontar / fijar stock** (con variantes), ver **stock bajo**, resumir **ventas** de un período y listar **deudas**. No borra nada. Un producto sin precio queda inactivo en el catálogo hasta que se le cargue uno.
+Chat con Gemini o Grok que, mediante herramientas limitadas a tu negocio, puede: **cargar productos** (nombre + stock → arma la descripción y categoría; con fotos adjuntas las mira y las guarda en el producto; también agrega o **reemplaza** las fotos de un producto existente), **editar productos**, **ingresar / descontar / fijar stock** (con variantes), ver **stock bajo**, resumir **ventas** de un período y listar **deudas**. No borra nada. Un producto sin precio queda inactivo en el catálogo hasta que se le cargue uno.
 
-**Claves y cuota:** `GEMINI_API_KEYS` en `.env` (separadas por coma) se usan en orden; si una devuelve 429 (cuota) o es inválida, se aparta un rato y pasa a la siguiente. Cuando se agotan todas, el chat avisa y el usuario puede cargar **su propia clave** en «Claves de IA» (se verifica con Google, se guarda por negocio y se usa solo cuando las del sistema no alcanzan). Modelos: `GEMINI_MODELS` (prueba en orden).
+**Claves y cuota:** `GEMINI_API_KEYS` y `GROK_API_KEYS` (xAI, claves `xai-…`) en `.env` o en Render → Environment, separadas por coma, se usan en ese orden (Gemini primero, después Grok). Si una devuelve error de cuota, es inválida o falla, se aparta un rato y se pasa a la siguiente, aunque sea de otro proveedor. Cuando se agotan todas, el chat avisa y cada usuario puede cargar **su propia clave de Gemini o de Grok** en «Claves de IA» (se verifica con el proveedor, se guarda por negocio y se usa solo cuando las del sistema no alcanzan). El proveedor se detecta por el prefijo de la clave. Modelos: `GEMINI_MODELS` y `GROK_MODELS` (se prueban en orden; por defecto `grok-4,grok-3`).
 Código: `backend/ai_keys.py` (rotación) · `backend/ai_agent.py` (herramientas + endpoints `/api/ai/*`) · `js/assistant.js`.
 
 ## Rendimiento (parte 6)
@@ -85,7 +85,7 @@ backend/
   invoice_pdf.py    PARTE 5 · PDF del comprobante (con CAE y QR si está autorizado)
   reports.py / exporters.py   estadísticas y exportación PDF/Excel (parte 4)
   schema.sql / database.py    esquema y migraciones automáticas; database.py traduce el SQL a Postgres
-  ai_keys.py / ai_agent.py    asistente IA con Gemini y rotación de claves
+  ai_keys.py / ai_agent.py    asistente IA con Gemini/Grok y rotación de claves
   migrate_to_supabase.py      copia una affari.db a Supabase
 css/ ops.css        estilos de la parte 5
 js/  ops.js         clientes, proveedores, deudas, flujo de caja

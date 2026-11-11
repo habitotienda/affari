@@ -1,4 +1,4 @@
-"""Asistente IA de Affari (Gemini con function calling).
+"""Asistente IA de Affari (Gemini o Grok con function calling).
 
 El modelo NO toca la base de datos directamente: solo puede pedir estas herramientas, que se ejecutan acá,
 siempre limitadas al negocio (store_id) del usuario autenticado:
@@ -388,9 +388,9 @@ def make_router(current_user):
             reply, actions = converse(u, text, d.images)
         except gk.AllKeysExhausted:
             return {"code": "no_keys", "actions": [], "reply": "Se agotó la cuota de IA de todas las claves del sistema. "
-                    "Podés seguir ahora agregando tu propia clave gratuita de Gemini (Google AI Studio) en «Claves de IA»."}
+                    "Podés seguir ahora agregando tu propia clave de Gemini (gratis en Google AI Studio) o de Grok (xAI) en «Claves de IA»."}
         except gk.GeminiError as e:
-            log.warning("Gemini: %s %s", e.kind, e)
+            log.warning("IA: %s %s", e.kind, e)
             raise HTTPException(502, "El servicio de IA no respondió. Probá de nuevo en un momento.")
         return {"reply": reply, "actions": actions}
 
@@ -422,9 +422,9 @@ def make_router(current_user):
         try:
             text = describe_product(u, name, cat, image, keys)
         except gk.AllKeysExhausted:
-            raise HTTPException(429, "Se agotó la cuota de IA. Agregá tu propia clave gratuita de Gemini en Asistente IA → Claves de IA.")
+            raise HTTPException(429, "Se agotó la cuota de IA. Agregá tu propia clave de Gemini o de Grok en Asistente IA → Claves de IA.")
         except gk.GeminiError as e:
-            log.warning("Gemini (describe): %s %s", e.kind, e)
+            log.warning("IA (describe): %s %s", e.kind, e)
             if e.kind == "quota":
                 raise HTTPException(429, "Se agotó la cuota de IA por ahora. Probá en unos minutos o agregá tu clave en Asistente IA.")
             raise HTTPException(502, "El servicio de IA no respondió. Probá de nuevo en un momento.")
@@ -458,18 +458,19 @@ def make_router(current_user):
             rows = c.execute("SELECT id, label, api_key, created_at FROM ai_keys WHERE store_id=? ORDER BY id", (u["store_id"],)).fetchall()
         st = gk.pool_status([r["api_key"] for r in rows])
         return {**st, "ready": st["server_available"] + st["own_available"] > 0,
-                "own_keys": [{"id": r["id"], "label": r["label"], "masked": gk.mask(r["api_key"]), "cooling": gk.cooling(r["api_key"])} for r in rows]}
+                "own_keys": [{"id": r["id"], "label": r["label"], "masked": gk.mask(r["api_key"]), "provider": gk.provider_of(r["api_key"]), "cooling": gk.cooling(r["api_key"])} for r in rows]}
 
     @R.post("/keys")
     def add_key(d: KeyIn, u=Depends(current_user)):
         key = d.key.strip()
         if not re.fullmatch(r"[A-Za-z0-9._\-]{20,200}", key):
-            raise HTTPException(400, "Esa clave no tiene el formato de una clave de Gemini.")
+            raise HTTPException(400, "Esa clave no tiene el formato de una clave de Gemini (AIza…) ni de Grok (xai-…).")
+        who = "xAI" if gk.provider_of(key) == "grok" else "Google"
         try:
             gk.verify_key(key)
         except gk.GeminiError as e:
             if e.kind in ("invalid", "fatal", "model"):
-                raise HTTPException(400, "Google rechazó esa clave. Revisá que esté bien copiada y activa.")
+                raise HTTPException(400, f"{who} rechazó esa clave. Revisá que esté bien copiada y activa.")
             if e.kind != "quota":
                 raise HTTPException(502, "No pudimos verificar la clave ahora. Probá de nuevo en un momento.")
         with db.conn() as c:

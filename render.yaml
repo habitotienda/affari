@@ -21,6 +21,8 @@ services:
         generateValue: true
       - key: GEMINI_API_KEYS
         sync: false
+      - key: GROK_API_KEYS        # opcional: claves de xAI (xai-...), separadas por coma; se usan después de las de Gemini
+        sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: ADMIN_VIP_EMAILS

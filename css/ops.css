@@ -74,3 +74,8 @@ tr.void td{color:var(--muted);text-decoration:line-through}tr.void td:last-child
 .modal.wide:has(.inv-items){max-width:780px}
 .modal.wide:has(.var-row){max-width:900px}
 .inv-it{grid-template-columns:2fr 1.4fr .6fr 1.1fr .9fr auto}
+
+/* Inventario: miniatura de la primera foto del producto */
+.inv-prod{display:flex;align-items:center;gap:12px;min-width:0}
+.inv-prod>div{min-width:0}
+.inv-prod .prod-th{width:44px;height:44px;flex:none}

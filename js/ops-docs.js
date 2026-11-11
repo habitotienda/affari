@@ -9,7 +9,7 @@ VIEWS.inventario = async function (el) {
   const cost = ps.reduce((s, p) => s + (p.variants.length ? p.variants.reduce((t, v) => t + v.stock * (v.cost || p.cost), 0) : p.stock * p.cost), 0);
   const retail = ps.reduce((s, p) => s + (p.variants.length ? p.variants.reduce((t, v) => t + v.stock * (v.price || p.price), 0) : p.stock * p.price), 0);
   const only = state.invLow ? 'low' : 'all';
-  el.innerHTML = head('Inventario & Stock', `${ps.length} productos · ${units} unidades`, `<button class="btn ai-pencil-btn" data-aiall title="Generar con IA la descripción de los productos que no tienen">${icon('edit', 16)}<span>Descripciones IA</span></button><button class="btn" data-import>${icon('download')}Importar de Treinta</button><button class="btn" data-stock>${icon('box')}Ingresar stock</button><button class="btn btn-primary" data-new>${icon('plus')}Nuevo producto</button>`) + `
+  el.innerHTML = head('Inventario & Stock', `${ps.length} productos · ${units} unidades`, `<button class="btn ai-pencil-btn" data-aiall title="Generar con IA la descripción de los productos que no tienen">${icon('edit', 16)}<span>Descripciones IA</span></button><button class="btn" data-stock>${icon('box')}Ingresar stock</button><button class="btn btn-primary" data-new>${icon('plus')}Nuevo producto</button>`) + `
     <section class="kpis"><div class="card kpi ${lowN ? 'alert-k' : ''}"><span>${lowN ? '⚠ ' : ''}Stock bajo</span><strong>${lowN}</strong><small>${lowN ? 'Reponelos para no perder ventas' : 'Todo el stock está en orden'}</small></div>
       <div class="card kpi"><span>Productos</span><strong>${ps.length}</strong><small>${ps.filter(p => p.variants.length).length} con variantes</small></div>
       <div class="card kpi"><span>Valor a costo</span><strong>${ars(cost)}</strong><small>Lo que invertiste en mercadería</small></div>
@@ -22,7 +22,7 @@ VIEWS.inventario = async function (el) {
     const q = (state.iq || '').toLowerCase(), rows = ps.filter(p => (!state.invLow || prodLow(p)) && (!q || (p.name + ' ' + p.category).toLowerCase().includes(q)));
     list.innerHTML = rows.length ? `<table><thead><tr><th>Producto</th><th class="num">Costo</th><th class="num">Precio</th><th>Stock</th><th></th></tr></thead><tbody>${rows.map(p => {
       const hv = p.variants.length, low = prodLow(p);
-      return `<tr class="${low ? 'row-low' : ''}"><td><strong>${esc(p.name)}</strong>${p.category ? `<span class="cell-sub">${esc(p.category)}</span>` : ''}${p.active ? '' : ' <span class="pill-stock pill-off">Inactivo</span>'}${hv ? `<span class="var-chip">${p.variants.length} variantes</span>` : ''}${low ? '<span class="low-tag">Stock bajo</span>' : ''}</td>
+      return `<tr class="${low ? 'row-low' : ''}"><td><div class="inv-prod">${p.images && p.images[0] ? `<img class="prod-th" src="${esc(p.images[0])}" alt="" loading="lazy" decoding="async">` : `<span class="prod-th">${esc((p.name[0] || '?').toUpperCase())}</span>`}<div><strong>${esc(p.name)}</strong>${p.category ? `<span class="cell-sub">${esc(p.category)}</span>` : ''}${p.active ? '' : ' <span class="pill-stock pill-off">Inactivo</span>'}${hv ? `<span class="var-chip">${p.variants.length} variantes</span>` : ''}${low ? '<span class="low-tag">Stock bajo</span>' : ''}</div></div></td>
         <td class="num">${ars(p.cost)}</td><td class="num">${ars(p.price)}</td><td>${hv ? `<span class="pill-stock ${p.variants.some(isLow) ? 'low' : ''}">${p.stock} u. en total</span>` : pill(p)}</td>
         <td><div class="act">${hv ? '' : `<button class="btn btn-sm" data-in="${p.id}">+ Stock</button>`}<button class="btn btn-sm" data-var="${p.id}">Variantes</button><button class="btn btn-sm" data-edit="${p.id}">Editar</button></div></td></tr>`
         + p.variants.map(v => `<tr class="row-var ${isLow(v) ? 'row-low' : ''}"><td>↳ ${esc(v.name)}${v.sku ? ` <span class="cell-sub" style="display:inline">· ${esc(v.sku)}</span>` : ''}${isLow(v) ? '<span class="low-tag">Stock bajo</span>' : ''}</td><td class="num">${ars(v.cost || p.cost)}</td><td class="num">${ars(v.price || p.price)}</td><td>${pill(v)} <span class="cell-sub" style="display:inline">mín. ${v.min_stock}</span></td><td><div class="act"><button class="btn btn-sm" data-vin="${v.id}">+ Stock</button></div></td></tr>`).join('');
@@ -34,7 +34,7 @@ VIEWS.inventario = async function (el) {
   };
   const q = el.querySelector('[data-q]'); q.value = state.iq || ''; q.oninput = () => { state.iq = q.value; draw(); };
   el.querySelectorAll('[name=invf]').forEach(r => r.onchange = () => { state.invLow = r.value === 'low'; draw(); });
-  el.querySelector('[data-import]').onclick = () => openTreintaImport(); el.querySelector('[data-aiall]').onclick = e => fillMissingDescriptions(ps, e.currentTarget);
+  el.querySelector('[data-aiall]').onclick = e => fillMissingDescriptions(ps, e.currentTarget);
   el.querySelector('[data-stock]').onclick = () => openStockModal(); el.querySelector('[data-new]').onclick = () => openProductModal(); draw();
 };
 
