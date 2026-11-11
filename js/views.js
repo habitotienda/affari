@@ -188,6 +188,48 @@ function openCropper(src, max = 800) {
   });
 }
 
+/* Fotos con IA (Cloudflare Workers AI): mejora una foto existente o crea una desde el nombre. No guarda nada: devuelve la elegida con onUse */
+function openPhotoAI({ src, name, category, onUse }) {
+  const styles = [['blanco', 'Fondo blanco'], ['gris', 'Gris de estudio'], ['ambiente', 'Ambiente natural'], ['oscuro', 'Premium oscuro']];
+  const ov = document.createElement('div'); ov.className = 'photo-ai-ov';
+  ov.innerHTML = `<div class="photo-ai" role="dialog" aria-modal="true" aria-label="Foto con IA">
+    <h2>${src ? 'Mejorar foto con IA' : 'Crear foto con IA'}</h2>
+    <p class="hint">${src ? 'La IA vuelve a fotografiar el producto con un fondo y una luz de estudio. Revisá que se vea igual al real antes de usarla.' : 'Crea una imagen ilustrativa a partir del nombre. Usala solo si no tenés una foto real del producto.'}</p>
+    <div class="pai-styles" role="group" aria-label="Estilo">${styles.map(([k, l], i) => `<button type="button" data-st="${k}" aria-pressed="${i === 0}">${l}</button>`).join('')}</div>
+    <div class="pai-pair"><figure ${src ? '' : 'hidden'}><div class="pai-box"><img data-before alt="Foto original"></div>Original</figure>
+      <figure ${src ? '' : 'style="grid-column:1/-1"'}><div class="pai-box" data-after><span class="muted">${src ? 'Acá aparece el resultado' : 'Acá aparece la imagen'}</span></div>Con IA</figure></div>
+    <div class="pai-err" data-err hidden role="alert"></div>
+    <div class="pai-foot"><button type="button" class="btn" data-cancel>Cerrar</button>
+      <button type="button" class="btn btn-ai" data-go>${icon('sparkles', 16)}<span>Generar</span></button>
+      <button type="button" class="btn" data-add hidden>Agregar como foto</button>
+      <button type="button" class="btn btn-primary" data-use hidden>${src ? 'Reemplazar la original' : 'Usar esta foto'}</button></div></div>`;
+  const $ = k => ov.querySelector(k);
+  const go = $('[data-go]'), add = $('[data-add]'), use = $('[data-use]'), err = $('[data-err]'), after = $('[data-after]');
+  let style = 'blanco', result = '', busy = false;
+  if (src) $('[data-before]').src = src;
+  const close = () => { document.removeEventListener('keydown', onKey, true); ov.remove(); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  ov.onclick = e => { if (e.target === ov) close(); };
+  $('[data-cancel]').onclick = close;
+  ov.querySelector('.pai-styles').onclick = e => { const b = e.target.closest('[data-st]'); if (!b || busy) return; style = b.dataset.st; ov.querySelectorAll('[data-st]').forEach(x => x.setAttribute('aria-pressed', x === b)); };
+  go.onclick = async () => {
+    if (busy) return; busy = true; go.disabled = true; err.hidden = true; add.hidden = use.hidden = true;
+    after.innerHTML = '<span class="pai-wait">Generando… puede tardar unos segundos</span>';
+    try {
+      const r = await httpRequest(src ? '/ai/image/enhance' : '/ai/image/create', { method: 'POST', timeout: 110000,
+        body: src ? { image: src, name, style, product_id: onUse.productId || null } : { name, category, style } });
+      result = r.image; after.innerHTML = ''; const im = new Image(); im.alt = 'Foto generada con IA'; im.src = result; after.appendChild(im);
+      use.hidden = false; add.hidden = !src || !onUse.canAdd(); go.querySelector('span').textContent = 'Probar de nuevo';
+    } catch (e) {
+      after.innerHTML = '<span class="muted">No se pudo generar</span>'; err.textContent = e.message || 'No se pudo generar la foto.'; err.hidden = false;
+    } finally { busy = false; go.disabled = false; }
+  };
+  use.onclick = () => { if (result) { onUse(result, src ? 'replace' : 'add'); close(); } };
+  add.onclick = () => { if (result) { onUse(result, 'add'); close(); } };
+  document.body.appendChild(ov); go.focus({ preventScroll: true });
+}
+
 async function openProductModal(p) {
   const all = await api('/products'), cats = [...new Set(all.map(x => x.category).filter(Boolean))];
   let imgs = [...(p?.images || [])];
@@ -197,7 +239,7 @@ async function openProductModal(p) {
     html: fld('Nombre', `<input id="pn" required value="${v('name')}" placeholder="Ej: Yerba mate 1kg">`, 'pn') +
       fld('Categoría', `<input id="pk" list="pkl" autocomplete="off" maxlength="40" value="${v('category')}" placeholder="Ej: Almacén, Bebidas…"><datalist id="pkl">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist>`, 'pk') +
       `<div class="field"><div class="label-row"><label for="pd">Descripción</label><button type="button" class="ai-pencil" data-aidesc title="Generar descripción con IA a partir del nombre y la foto" aria-label="Generar descripción con IA">${icon('edit', 16)}</button></div><textarea id="pd" placeholder="Detalle que verá el cliente en el catálogo">${v('description')}</textarea></div>
-      <div class="field"><label>Fotos del producto (hasta 5)</label><div class="gal-ed" data-gal></div><input id="pimg" type="file" accept="image/*" multiple hidden><small class="hint">La primera es la principal. Se optimizan automáticamente. Usá ✂ para recortar capturas.</small></div>
+      <div class="field"><label>Fotos del producto (hasta 5)</label><div class="gal-ed" data-gal></div><input id="pimg" type="file" accept="image/*" multiple hidden><div class="gal-tools"><button type="button" class="btn-ai" data-aigen>${icon('sparkles', 14)}<span>Crear foto con IA</span></button></div><small class="hint">La primera es la principal. Se optimizan automáticamente. Usá ✂ para recortar y ✨ para dejarla con aspecto de estudio.</small></div>
       <div class="row2">${fld('Precio de venta', `<input id="pp" type="number" min="0" step="any" required value="${p ? p.price : ''}">`, 'pp')}${fld('Costo', `<input id="pc" type="number" min="0" step="any" value="${p ? p.cost : 0}">`, 'pc')}
       ${fld('Stock', `<input id="ps" type="number" min="0" required value="${p ? p.stock : 0}" ${p && (p.variants || []).length ? 'disabled title="Se calcula con las variantes"' : ''}>`, 'ps')}${fld('Alerta de stock bajo', `<input id="pm" type="number" min="0" value="${p ? p.min_stock : 5}">`, 'pm')}</div>
       <label class="check"><input id="pa" type="checkbox" ${!p || p.active ? 'checked' : ''}>Activo (visible en el catálogo público)</label>`,
@@ -219,9 +261,16 @@ async function openProductModal(p) {
     finally { pen.disabled = false; pen.classList.remove('busy'); }
   };
   const gal = form.querySelector('[data-gal]'), input = form.querySelector('#pimg');
-  const drawGal = () => { gal.innerHTML = imgs.map((s, i) => `<div class="gal-it"><img src="${s}" alt="Foto ${i + 1}"><button type="button" data-rm="${i}" aria-label="Quitar foto">×</button><button type="button" class="gal-crop" data-crop="${i}" aria-label="Recortar foto ${i + 1}" title="Recortar">${icon('crop', 12)}</button>${i ? `<button type="button" class="mk" data-main="${i}">Principal</button>` : '<em>Principal</em>'}</div>`).join('') + (imgs.length < 5 ? '<label class="gal-add" for="pimg" title="Agregar foto">+</label>' : ''); };
+  const drawGal = () => { gal.innerHTML = imgs.map((s, i) => `<div class="gal-it"><img src="${s}" alt="Foto ${i + 1}"><button type="button" data-rm="${i}" aria-label="Quitar foto">×</button><button type="button" class="gal-crop" data-crop="${i}" aria-label="Recortar foto ${i + 1}" title="Recortar">${icon('crop', 12)}</button><button type="button" class="gal-ai" data-enh="${i}" aria-label="Mejorar foto ${i + 1} con IA" title="Mejorar con IA">${icon('sparkles', 12)}</button>${i ? `<button type="button" class="mk" data-main="${i}">Principal</button>` : '<em>Principal</em>'}</div>`).join('') + (imgs.length < 5 ? '<label class="gal-add" for="pimg" title="Agregar foto">+</label>' : ''); };
   gal.onclick = e => {
     const rm = e.target.closest('[data-rm]'), mk = e.target.closest('[data-main]'), cr = e.target.closest('[data-crop]');
+    const en = e.target.closest('[data-enh]');
+    if (en) {
+      const i = +en.dataset.enh, pname = form.querySelector('#pn').value.trim();
+      openPhotoAI({ src: imgs[i], name: pname, category: form.querySelector('#pk').value.trim(),
+        onUse: Object.assign((img, mode) => { if (mode === 'replace') imgs[i] = img; else if (imgs.length < 5) imgs.push(img); drawGal(); toast('Foto lista. Se guarda cuando guardes el producto.'); }, { productId: p ? p.id : null, canAdd: () => imgs.length < 5 }) });
+      return;
+    }
     if (cr) { const i = +cr.dataset.crop; openCropper(orig.get(imgs[i]) || imgs[i]).then(out => { if (out) { imgs[i] = out; drawGal(); toast('Foto recortada'); } }); return; }
     if (rm) imgs.splice(+rm.dataset.rm, 1); else if (mk) imgs.unshift(...imgs.splice(+mk.dataset.main, 1)); else return; drawGal();
   };
@@ -229,6 +278,13 @@ async function openProductModal(p) {
     const files = [...input.files].slice(0, 5 - imgs.length); input.value = '';
     for (const f of files) { try { const small = await imgToData(f, 800); imgs.push(small); orig.set(small, await imgToData(f, 1600, 'image/jpeg', .9)); } catch (err) { toast(err.message); } }
     drawGal();
+  };
+  form.querySelector('[data-aigen]').onclick = () => {
+    const pname = form.querySelector('#pn').value.trim();
+    if (!pname) { toast('Escribí primero el nombre del producto'); form.querySelector('#pn').focus(); return; }
+    if (imgs.length >= 5) { toast('Ya tenés 5 fotos: quitá una para crear otra'); return; }
+    openPhotoAI({ src: '', name: pname, category: form.querySelector('#pk').value.trim(),
+      onUse: Object.assign((img) => { if (imgs.length < 5) imgs.push(img); drawGal(); toast('Foto lista. Se guarda cuando guardes el producto.'); }, { productId: null, canAdd: () => false }) });
   };
   drawGal();
 }

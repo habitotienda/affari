@@ -1,4 +1,4 @@
-/* Asistente IA (Gemini y Grok): chat para cargar productos, controlar stock y consultar el negocio. Usa api(), esc(), icon(), toast(), openModal(), imgToData() */
+/* Asistente IA (Gemini y Groq): chat para cargar productos, controlar stock y consultar el negocio. Usa api(), esc(), icon(), toast(), openModal(), imgToData() */
 const AI_SUGGEST = [
   'Agregá 20 remeras negras a $15000',
   '¿Qué productos tengo con stock bajo?',
@@ -44,9 +44,9 @@ function openAiKeysModal(onChange) {
   api('/ai/status').then(st => {
     const { form, close } = openModal({ title: 'Claves de IA', submit: 'Agregar mi clave', wide: true,
       html: `<p class="hint ai-keys-info">Claves del sistema disponibles: <strong>${st.server_available} de ${st.server_total}</strong>. Cuando se agoten todas, el asistente usa tus propias claves.
-        Podés cargar una clave de <strong>Gemini</strong> (gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>) o de <strong>Grok</strong> (en <a href="https://console.x.ai" target="_blank" rel="noopener">xAI Console</a>). Si una se agota, el asistente pasa solo a la siguiente.</p>
-        ${st.own_keys.length ? `<ul class="ai-keys">${st.own_keys.map(k => `<li><span>${icon('key', 16)}<code>${esc(k.masked)}</code> <small class="muted">${k.provider === 'grok' ? 'Grok' : 'Gemini'}</small>${k.label ? ` · ${esc(k.label)}` : ''}${k.cooling ? ' <em>(en espera por cuota)</em>' : ''}</span><button type="button" class="btn btn-sm" data-del="${k.id}" aria-label="Quitar clave">${icon('trash', 14)}</button></li>`).join('')}</ul>` : '<div class="empty">Todavía no cargaste claves propias.</div>'}
-        ${fld('Clave de Gemini o Grok', '<input id="aik" autocomplete="off" spellcheck="false" placeholder="Pegá tu clave (Gemini: AIza… · Grok: xai-…)" required>', 'aik')}
+        Podés cargar una clave de <strong>Gemini</strong> (gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>) o de <strong>Groq</strong> (gratis en <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com</a>). Si una se agota, el asistente pasa solo a la siguiente.</p>
+        ${st.own_keys.length ? `<ul class="ai-keys">${st.own_keys.map(k => `<li><span>${icon('key', 16)}<code>${esc(k.masked)}</code> <small class="muted">${k.provider === 'groq' ? 'Groq' : 'Gemini'}</small>${k.label ? ` · ${esc(k.label)}` : ''}${k.cooling ? ' <em>(en espera por cuota)</em>' : ''}</span><button type="button" class="btn btn-sm" data-del="${k.id}" aria-label="Quitar clave">${icon('trash', 14)}</button></li>`).join('')}</ul>` : '<div class="empty">Todavía no cargaste claves propias.</div>'}
+        ${fld('Clave de Gemini o Groq', '<input id="aik" autocomplete="off" spellcheck="false" placeholder="Pegá tu clave (Gemini: AIza… · Groq: gsk_…)" required>', 'aik')}
         ${fld('Nombre (opcional)', '<input id="ail" maxlength="40" placeholder="Ej: Mi cuenta">', 'ail')}`,
       onSubmit: async (f, close) => {
         await api('/ai/keys', { method: 'POST', body: { key: f.querySelector('#aik').value.trim(), label: f.querySelector('#ail').value.trim() } });

@@ -1,4 +1,4 @@
-"""Asistente IA de Affari (Gemini o Grok con function calling).
+"""Asistente IA de Affari (Gemini o Groq con function calling).
 
 El modelo NO toca la base de datos directamente: solo puede pedir estas herramientas, que se ejecutan acá,
 siempre limitadas al negocio (store_id) del usuario autenticado:
@@ -388,10 +388,10 @@ def make_router(current_user):
             reply, actions = converse(u, text, d.images)
         except gk.AllKeysExhausted:
             return {"code": "no_keys", "actions": [], "reply": "Se agotó la cuota de IA de todas las claves del sistema. "
-                    "Podés seguir ahora agregando tu propia clave de Gemini (gratis en Google AI Studio) o de Grok (xAI) en «Claves de IA»."}
+                    "Podés seguir ahora agregando tu propia clave de Gemini (gratis en Google AI Studio) o de Groq (gratis en console.groq.com) en «Claves de IA»."}
         except gk.GeminiError as e:
             log.warning("IA: %s %s", e.kind, e)
-            raise HTTPException(502, "El servicio de IA no respondió. Probá de nuevo en un momento.")
+            raise HTTPException(502, f"El servicio de IA no respondió ({e.kind}: {str(e)[:140]}). Probá de nuevo en un momento.")
         return {"reply": reply, "actions": actions}
 
     @R.post("/describe")
@@ -422,12 +422,12 @@ def make_router(current_user):
         try:
             text = describe_product(u, name, cat, image, keys)
         except gk.AllKeysExhausted:
-            raise HTTPException(429, "Se agotó la cuota de IA. Agregá tu propia clave de Gemini o de Grok en Asistente IA → Claves de IA.")
+            raise HTTPException(429, "Se agotó la cuota de IA. Agregá tu propia clave de Gemini o de Groq en Asistente IA → Claves de IA.")
         except gk.GeminiError as e:
             log.warning("IA (describe): %s %s", e.kind, e)
             if e.kind == "quota":
                 raise HTTPException(429, "Se agotó la cuota de IA por ahora. Probá en unos minutos o agregá tu clave en Asistente IA.")
-            raise HTTPException(502, "El servicio de IA no respondió. Probá de nuevo en un momento.")
+            raise HTTPException(502, f"El servicio de IA no respondió ({e.kind}: {str(e)[:140]}). Probá de nuevo en un momento.")
         saved = False
         if d.save_if_empty and d.product_id is not None:
             with db.conn() as c:
@@ -464,8 +464,8 @@ def make_router(current_user):
     def add_key(d: KeyIn, u=Depends(current_user)):
         key = d.key.strip()
         if not re.fullmatch(r"[A-Za-z0-9._\-]{20,200}", key):
-            raise HTTPException(400, "Esa clave no tiene el formato de una clave de Gemini (AIza…) ni de Grok (xai-…).")
-        who = "xAI" if gk.provider_of(key) == "grok" else "Google"
+            raise HTTPException(400, "Esa clave no tiene el formato de una clave de Gemini (AIza…) ni de Groq (gsk_…).")
+        who = "Groq" if gk.provider_of(key) == "groq" else "Google"
         try:
             gk.verify_key(key)
         except gk.GeminiError as e:

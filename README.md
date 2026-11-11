@@ -19,10 +19,15 @@ Si al conectar da «Network is unreachable», tu red no tiene IPv6: en Supabase 
 Todas las tablas se crean con RLS activado (sin políticas): la API pública de Supabase no puede leerlas; solo este backend (rol `postgres`).
 
 ## Asistente IA (menú «Asistente IA»)
-Chat con Gemini o Grok que, mediante herramientas limitadas a tu negocio, puede: **cargar productos** (nombre + stock → arma la descripción y categoría; con fotos adjuntas las mira y las guarda en el producto; también agrega o **reemplaza** las fotos de un producto existente), **editar productos**, **ingresar / descontar / fijar stock** (con variantes), ver **stock bajo**, resumir **ventas** de un período y listar **deudas**. No borra nada. Un producto sin precio queda inactivo en el catálogo hasta que se le cargue uno.
+Chat con Gemini o Groq que, mediante herramientas limitadas a tu negocio, puede: **cargar productos** (nombre + stock → arma la descripción y categoría; con fotos adjuntas las mira y las guarda en el producto; también agrega o **reemplaza** las fotos de un producto existente), **editar productos**, **ingresar / descontar / fijar stock** (con variantes), ver **stock bajo**, resumir **ventas** de un período y listar **deudas**. No borra nada. Un producto sin precio queda inactivo en el catálogo hasta que se le cargue uno.
 
-**Claves y cuota:** `GEMINI_API_KEYS` y `GROK_API_KEYS` (xAI, claves `xai-…`) en `.env` o en Render → Environment, separadas por coma, se usan en ese orden (Gemini primero, después Grok). Si una devuelve error de cuota, es inválida o falla, se aparta un rato y se pasa a la siguiente, aunque sea de otro proveedor. Cuando se agotan todas, el chat avisa y cada usuario puede cargar **su propia clave de Gemini o de Grok** en «Claves de IA» (se verifica con el proveedor, se guarda por negocio y se usa solo cuando las del sistema no alcanzan). El proveedor se detecta por el prefijo de la clave. Modelos: `GEMINI_MODELS` y `GROK_MODELS` (se prueban en orden; por defecto `grok-4,grok-3`).
+**Claves y cuota:** `GEMINI_API_KEYS` y `GROQ_API_KEYS` (Groq, claves `gsk_…`, **gratis** en [console.groq.com/keys](https://console.groq.com/keys)) en `.env` o en Render → Environment, separadas por coma, se usan en ese orden (Gemini primero, después Groq). Si una devuelve error de cuota, es inválida o falla, se aparta un rato y se pasa a la siguiente, aunque sea de otro proveedor. Cuando se agotan todas, el chat avisa y cada usuario puede cargar **su propia clave de Gemini o de Groq** en «Claves de IA» (se verifica con el proveedor, se guarda por negocio y se usa solo cuando las del sistema no alcanzan). El proveedor se detecta por el prefijo de la clave. Modelos (se prueban en orden): `GEMINI_MODELS`; `GROQ_MODELS` (texto, por defecto `llama-3.3-70b-versatile,meta-llama/llama-4-scout-17b-16e-instruct`) y `GROQ_VISION_MODELS` (cuando el mensaje trae fotos, por defecto `meta-llama/llama-4-scout-17b-16e-instruct,meta-llama/llama-4-maverick-17b-128e-instruct`). Si Groq retira un modelo, cambialo desde Render sin tocar código.
 Código: `backend/ai_keys.py` (rotación) · `backend/ai_agent.py` (herramientas + endpoints `/api/ai/*`) · `js/assistant.js`.
+
+## Fotos de producto con IA (Cloudflare Workers AI)
+En el formulario de producto, cada foto tiene un botón ✨ que la **vuelve a fotografiar con aspecto de estudio** (fondo blanco, gris, ambiente o premium oscuro) y un botón «Crear foto con IA» que genera una imagen ilustrativa a partir del nombre. El modelo es FLUX.2 klein de Black Forest Labs. Se muestra antes/después y el usuario elige **reemplazar la original, agregarla como foto extra o descartarla**; nada se guarda hasta que guarda el producto. La IA puede alterar detalles (logos, textos chicos): conviene revisar que el producto se vea igual al real.
+
+**Configuración** (Render → Environment): `CF_ACCOUNT_ID` y `CF_API_TOKEN` (Cloudflare → My Profile → API Tokens → plantilla «Workers AI»). Opcional: `CF_ACCOUNTS=id1:token1,id2:token2` para rotar entre cuentas cuando una agota la cuota diaria gratuita (10.000 neuronas por día y cuenta), y `CF_IMAGE_MODELS` (por defecto `@cf/black-forest-labs/flux-2-klein-4b,@cf/black-forest-labs/flux-2-klein-9b`). Límite: 25 fotos por hora y negocio. Código: `backend/cf_images.py` (endpoints `/api/ai/image/*`) · `openPhotoAI()` en `js/views.js`. Tests: `python tests/cf_images_test.py` y `python tests/groq_flow_test.py`.
 
 ## Rendimiento (parte 6)
 - **Fotos de productos por URL**: `/api/products` y el catálogo público ya no devuelven el base64 de cada foto; devuelven `/api/img/<id>/<n>?v=<versión>` (archivo con caché de 1 año; la versión cambia si cambia la foto). `products.img_n` / `img_v` se calculan solos (migración automática + `backfill_images`). Al editar un producto el navegador reenvía esas URLs y el backend conserva las fotos guardadas.
@@ -85,7 +90,8 @@ backend/
   invoice_pdf.py    PARTE 5 · PDF del comprobante (con CAE y QR si está autorizado)
   reports.py / exporters.py   estadísticas y exportación PDF/Excel (parte 4)
   schema.sql / database.py    esquema y migraciones automáticas; database.py traduce el SQL a Postgres
-  ai_keys.py / ai_agent.py    asistente IA con Gemini/Grok y rotación de claves
+  ai_keys.py / ai_agent.py    asistente IA con Gemini/Groq y rotación de claves
+  cf_images.py                fotos de producto con Cloudflare Workers AI
   migrate_to_supabase.py      copia una affari.db a Supabase
 css/ ops.css        estilos de la parte 5
 js/  ops.js         clientes, proveedores, deudas, flujo de caja

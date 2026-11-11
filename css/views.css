@@ -149,3 +149,24 @@
 .tz-in{width:100%;min-width:90px;border:1px solid transparent;border-radius:6px;padding:6px 8px;background:transparent;font:inherit;outline:0}
 .tz-in:hover{border-color:var(--border)}.tz-in:focus{border-color:var(--primary-2);background:var(--card)}.tz-num{width:96px;text-align:right}
 @media(prefers-reduced-motion:reduce){.tz-spin{animation-duration:2.4s}}
+
+/* Fotos con IA (Cloudflare Workers AI) */
+.gal-it>.gal-ai{position:absolute;top:3px;left:26px;width:20px;height:20px;border:0;border-radius:50%;background:rgba(15,23,42,.75);color:#fff;cursor:pointer;display:grid;place-items:center}
+.gal-it>.gal-ai:hover{background:#8B5CF6}
+.gal-tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.btn-ai{display:inline-flex;align-items:center;gap:6px;border:1px solid #DDD6FE;background:#F5F3FF;color:#6D28D9;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.btn-ai:hover:not(:disabled){background:#8B5CF6;color:#fff}
+.photo-ai-ov{position:fixed;inset:0;z-index:85;display:grid;place-items:center;padding:12px;background:rgba(15,23,42,.72)}
+.photo-ai{background:var(--card,#fff);border-radius:var(--radius,12px);width:min(560px,100%);max-height:94vh;overflow:auto;padding:16px;display:grid;gap:12px}
+.photo-ai h2{margin:0;font-size:18px}
+.photo-ai .pai-styles{display:flex;gap:6px;flex-wrap:wrap}
+.photo-ai .pai-styles button{border:1px solid var(--border);background:var(--bg);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+.photo-ai .pai-styles button[aria-pressed=true]{background:#8B5CF6;border-color:#8B5CF6;color:#fff}
+.photo-ai .pai-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.photo-ai .pai-pair figure{margin:0;display:grid;gap:4px;text-align:center;font-size:12px;color:var(--muted,#64748B)}
+.photo-ai .pai-pair .pai-box{aspect-ratio:1/1;border:1px solid var(--border);border-radius:var(--radius,12px);background:var(--bg);display:grid;place-items:center;overflow:hidden}
+.photo-ai .pai-pair img{width:100%;height:100%;object-fit:contain}
+.photo-ai .pai-foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.photo-ai .pai-wait{animation:ai-pulse .8s ease-in-out infinite alternate;color:#8B5CF6;font-size:13px}
+.photo-ai .pai-err{color:#B91C1C;font-size:13px}
+@media(max-width:520px){.photo-ai .pai-pair{grid-template-columns:1fr}}

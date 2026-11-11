@@ -21,7 +21,11 @@ services:
         generateValue: true
       - key: GEMINI_API_KEYS
         sync: false
-      - key: GROK_API_KEYS        # opcional: claves de xAI (xai-...), separadas por coma; se usan después de las de Gemini
+      - key: GROQ_API_KEYS        # opcional: claves gratis de Groq (gsk_...), separadas por coma; se usan después de las de Gemini
+        sync: false
+      - key: CF_ACCOUNT_ID        # Cloudflare Workers AI: fotos de producto con IA (ID de cuenta)
+        sync: false
+      - key: CF_API_TOKEN         # token de API con permiso "Workers AI"
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
