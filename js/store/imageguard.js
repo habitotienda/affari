@@ -8,6 +8,8 @@
    · sin src      -> la repone con la URL que tenía;
    · rota         -> (sf-broken, o terminó de cargar sin ancho) la reintenta hasta 3 rondas y, desde la 2.ª, pide la foto original en vez de la miniatura;
    · en reintento -> no la toca: de esas se encarga utils.js (así no se duplican pedidos).
+   Si una foto falla varias veces, o tarda más de 10 s, se le dibuja encima un botón de flecha circular (↻): al tocarlo se vuelve a pedir
+   (la 2.ª vez pide la foto original en vez de la miniatura) y gira mientras carga. Desaparece solo cuando la foto aparece.
    Se rearma sola al volver la conexión o la pestaña. Se detiene cuando todas están cargadas o ya no hay nada más por intentar.
    API: sfImageGuard.watch(cards)  ·  .status() -> { total, ok, loading, pending, broken, failed, done }  ·  .stop()
    Evento: document 'sf:images' con detail = status() cada vez que cambia el recuento. */
@@ -19,7 +21,9 @@
     NEAR = 900,              // px (arriba o abajo de la pantalla) dentro de los que una foto sin pedir ya se considera «por ver»
     FAST = 350, SLOW = 3000; // cada cuánto revisa: con descargas en curso / en espera
   let cards = [], timer = null, last = '';
-  const run = new Map(), rounds = new WeakMap(), want = new WeakMap();   // img -> inicio · img -> rondas · img -> URL original
+  const run = new Map(), rounds = new WeakMap(), want = new WeakMap(), since = new WeakMap(), manual = new WeakSet();   // since: desde cuándo carga · manual: reintentada con el botón
+  const SLOW_BTN = 10000;    // ms cargando antes de ofrecer el botón de reintento
+  const BTN = '<button type="button" class="sf-reload" aria-label="No cargó la foto. Tocá para reintentar" title="Reintentar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>';   // img -> inicio · img -> rondas · img -> URL original
 
   const mainImg = card => card.querySelector('.sf-slides img');
   const imgs = () => cards.filter(c => c.isConnected).map(mainImg).filter(Boolean);
@@ -33,6 +37,19 @@
   };
   const remember = img => { if (!want.has(img)) { const u = img.dataset.first || img.dataset.src0 || img.getAttribute('src'); if (u) want.set(img, u); } };
   const dist = img => { const r = img.getBoundingClientRect(); return r.bottom < 0 ? -r.bottom : r.top > innerHeight ? r.top - innerHeight : 0; };
+
+  /* Botón ↻ sobre la foto: aparece si falló varias veces, quedó rota o lleva mucho cargando; gira mientras se reintenta a mano */
+  function paint(img, st, now) {
+    const gal = img.closest && img.closest('.sf-gal'); if (!gal) return;
+    if (st === 'loading') { if (!since.has(img)) since.set(img, now); } else since.delete(img);
+    if (st === 'ok') manual.delete(img);
+    const trouble = st === 'broken' || (st === 'loading' && (+img.dataset.rt >= 2 || now - since.get(img) > SLOW_BTN));
+    const show = st !== 'ok' && (trouble || manual.has(img));
+    let b = gal.querySelector('.sf-reload');
+    if (show && !b) { gal.insertAdjacentHTML('beforeend', BTN); b = gal.querySelector('.sf-reload'); }
+    else if (!show && b) return b.remove();
+    if (b) b.classList.toggle('busy', st === 'loading' && manual.has(img));
+  }
 
   function status() {
     const s = { total: 0, ok: 0, loading: 0, pending: 0, broken: 0, failed: 0, done: false };
@@ -64,6 +81,7 @@
   function tick() {
     timer = null;
     const now = Date.now(), list = imgs();
+    list.forEach(i => paint(i, stateOf(i), now));
     for (const [img, t] of run) { const st = stateOf(img); if (!img.isConnected || st === 'ok' || st === 'broken' || st === 'lost' || now - t > RUN_MAX) run.delete(img); }
     if (!document.hidden && navigator.onLine !== false) {
       const todo = list.filter(i => !run.has(i)).map(i => [i, stateOf(i)])
@@ -82,6 +100,17 @@
   addEventListener('online', revive); addEventListener('pageshow', revive);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) revive(); });
   document.addEventListener('load', e => { if (e.target instanceof HTMLImageElement && run.has(e.target)) kick(); }, true);   // terminó una: arranca la siguiente sin esperar
+
+  /* Toque en ↻: reintenta esa foto ya mismo (no abre el visor ni dispara el clic de la tarjeta) */
+  document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('.sf-reload'); if (!b) return;
+    e.stopPropagation(); e.preventDefault();
+    const gal = b.closest('.sf-gal'), img = gal && gal.querySelector('.sf-slides img'); if (!img) return;
+    const st = stateOf(img);
+    manual.add(img); since.delete(img); rounds.set(img, Math.min(rounds.get(img) || 0, ROUNDS - 1));
+    begin(img, st === 'pending' || st === 'lost' ? st : 'broken');
+    paint(img, stateOf(img), Date.now()); kick(FAST);
+  }, true);
 
   window.sfImageGuard = {
     watch(list) { cards = [...(list || [])]; run.clear(); last = ''; kick(); return this; },

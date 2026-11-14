@@ -398,3 +398,13 @@
 .sf-pager{grid-column:1/-1;text-align:center;padding:18px 0 8px;min-height:56px}
 .sf-dimg{cursor:zoom-in}.sf-dmore{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.sf-dmore img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;cursor:zoom-in;background:var(--soft);color:transparent;font-size:0}
 [data-list] .sf-info h3{cursor:pointer}
+/* Botón ↻ de reintento sobre una foto que no cargó (lo dibuja imageguard.js) */
+.sf-reload{position:absolute;z-index:4;left:50%;top:50%;transform:translate(-50%,-50%);width:46px;height:46px;border-radius:50%;border:0;padding:0;display:grid;place-items:center;cursor:pointer;
+  background:var(--ac);color:#fff;box-shadow:0 4px 14px rgba(15,23,42,.28);-webkit-tap-highlight-color:transparent}
+.sf-reload:active{transform:translate(-50%,-50%) scale(.94)}
+.sf-reload:focus-visible{outline:3px solid color-mix(in srgb,var(--ac) 40%,#fff);outline-offset:2px}
+.sf-reload.busy svg{animation:sfspin .8s linear infinite}
+@keyframes sfspin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.sf-reload.busy svg{animation-duration:2.4s}}
+.sf-shell[data-view="list"] .sf-reload{width:36px;height:36px}.sf-shell[data-view="list"] .sf-reload svg{width:18px;height:18px}
+.sf-gal:has(.sf-reload) .sf-slides img:first-child{visibility:hidden}
