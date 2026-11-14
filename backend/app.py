@@ -452,18 +452,45 @@ def list_products(u=Depends(current_user)):
                                        "images": [img_url(r["id"], i, r["img_v"]) for i in range(r["img_n"])]} for r in rows])
     return out
 
+_THUMBS = {}                      # (pid, i, v, w) -> (bytes, mime); caché chica en memoria para no reescalar la misma foto cada vez
+_THUMBS_MAX = 400
+_THUMB_W = (160, 320, 640)
+
+def _thumb(raw, mime, w):
+    """Versión reducida (ancho máx. w) de la foto. Si algo falla, se devuelve la original."""
+    try:
+        from PIL import Image
+        im = Image.open(io.BytesIO(raw))
+        if im.width <= w: return raw, mime
+        im = im.convert("RGBA" if im.mode in ("RGBA", "LA", "P") else "RGB")
+        im = im.resize((w, max(1, round(im.height * w / im.width))), Image.LANCZOS)
+        buf = io.BytesIO()
+        if im.mode == "RGBA": im.save(buf, "WEBP", quality=80); return buf.getvalue(), "image/webp"
+        im.save(buf, "JPEG", quality=80, optimize=True); return buf.getvalue(), "image/jpeg"
+    except Exception:
+        return raw, mime
+
 @app.get("/api/img/{pid}/{i}")
-def product_image(pid: int, i: int, v: str = ""):
-    """Foto de producto como archivo cacheable (la URL incluye la versión, así que el navegador la baja una sola vez)."""
-    with db.conn() as c:
-        r = c.execute("SELECT images, img_v FROM products WHERE id=?", (pid,)).fetchone()
-    imgs = parse_images(r["images"]) if r else []
-    if not r or v != r["img_v"] or not 0 <= i < len(imgs):
-        raise HTTPException(404, "Imagen inexistente.")
-    m = re.match(r"^data:(image/[a-z]+);base64,(.+)$", imgs[i], re.S)
-    if not m:
-        raise HTTPException(404, "Imagen inexistente.")
-    return Response(base64.b64decode(m.group(2)), media_type=m.group(1), headers={"Cache-Control": "public, max-age=31536000, immutable"})
+def product_image(pid: int, i: int, v: str = "", w: int = 0):
+    """Foto de producto como archivo cacheable (la URL incluye la versión, así que el navegador la baja una sola vez).
+    w=160/320/640 pide una versión reducida: el catálogo no necesita decodificar fotos enormes en el celular."""
+    key = (pid, i, v, w)
+    hit = _THUMBS.get(key) if w else None
+    if not hit:
+        with db.conn() as c:
+            r = c.execute("SELECT images, img_v FROM products WHERE id=?", (pid,)).fetchone()
+        imgs = parse_images(r["images"]) if r else []
+        if not r or v != r["img_v"] or not 0 <= i < len(imgs):
+            raise HTTPException(404, "Imagen inexistente.")
+        m = re.match(r"^data:(image/[a-z]+);base64,(.+)$", imgs[i], re.S)
+        if not m:
+            raise HTTPException(404, "Imagen inexistente.")
+        hit = (base64.b64decode(m.group(2)), m.group(1))
+        if w in _THUMB_W:
+            hit = _thumb(hit[0], hit[1], w)
+            if len(_THUMBS) >= _THUMBS_MAX: _THUMBS.pop(next(iter(_THUMBS)), None)
+            _THUMBS[key] = hit
+    return Response(hit[0], media_type=hit[1], headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 @app.post("/api/products")
 def create_product(d: ProductIn, u=Depends(current_user)):

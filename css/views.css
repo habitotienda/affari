@@ -193,3 +193,7 @@
 }
 /* La página nunca se desplaza de costado en el celular (corría los modales fuera de la pantalla) */
 html,body{max-width:100%;overflow-x:clip}
+
+/* ✕ de cada foto: centrada */
+.gal-it>button[data-rm]{display:grid;place-items:center;padding:0;line-height:0;font-size:16px}
+@media(pointer:coarse){.gal-it>button[data-rm]{font-size:20px}}

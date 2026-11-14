@@ -8,9 +8,9 @@ function sfGallery(p) {
   /* Solo la primera foto se descarga al dibujar la tarjeta. Las demás (y las miniaturas) esperan a que el visitante toque
      o pase el mouse por la galería (sfHydrate). Con 150 productos × 5 fotos, bajarlas todas llenaba la memoria del celular y lo congelaba. */
   return `<div class="sf-slides" data-zoom="${p.id}" tabindex="0" role="group" aria-label="Fotos de ${sfEsc(p.name)}">${imgs.map((s, i) =>
-      `<img ${i ? 'data-src' : 'src'}="${sfEsc(s)}" alt="${sfEsc(p.name)} (foto ${i + 1} de ${imgs.length})" ${i ? '' : 'loading="lazy" '}decoding="async">`).join('')}</div>`
+      `<img ${i ? 'data-src' : 'src'}="${sfEsc(sfThumb(s, 640))}" alt="${sfEsc(p.name)} (foto ${i + 1} de ${imgs.length})" ${i ? '' : 'loading="lazy" '}decoding="async">`).join('')}</div>`
     + (many ? `<button type="button" class="sf-arrow l" data-slide="-1" aria-label="Foto anterior">${SF_ICON.prev}</button><button type="button" class="sf-arrow r" data-slide="1" aria-label="Foto siguiente">${SF_ICON.next}</button>
-      <div class="sf-thumbs">${imgs.map((s, i) => `<button type="button" data-th="${i}" class="${i ? '' : 'on'}" aria-label="Ver foto ${i + 1}"><img data-src="${sfEsc(s)}" alt="" decoding="async"></button>`).join('')}</div>` : '');
+      <div class="sf-thumbs">${imgs.map((s, i) => `<button type="button" data-th="${i}" class="${i ? '' : 'on'}" aria-label="Ver foto ${i + 1}"><img data-src="${sfEsc(sfThumb(s, 160))}" alt="" decoding="async"></button>`).join('')}</div>` : '');
 }
 
 /* Descarga las fotos pendientes de una galería (una sola vez) */

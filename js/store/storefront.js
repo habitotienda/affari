@@ -43,8 +43,8 @@ function mountStore(el, init) {
   const root = el.querySelector('[data-root]'), layer = el.querySelector('[data-layer]'), q = el.querySelector('[data-q]');
   const $ = s => el.querySelector(s);
   if (embedded) root.dataset.emb = '';
-  /* Celular modesto (poca RAM o pocos núcleos): el fondo animado arranca pausado; el botón «Reanudar fondo» lo activa */
-  try { if (!embedded && matchMedia('(pointer:coarse)').matches && ((navigator.deviceMemory || 8) <= 4 || (navigator.hardwareConcurrency || 8) <= 4)) paused = true; } catch {}
+  /* Celular / tablet táctil: el fondo animado arranca pausado (las animaciones a pantalla completa son lo más pesado para la GPU); el botón «Reanudar fondo» lo activa */
+  try { if (!embedded && matchMedia('(pointer:coarse)').matches) paused = true; } catch {}
 
   /* ---------- Piezas de UI ---------- */
   const stepper = (p, n, cls = '') => `<div class="sf-step ${cls}"><button type="button" data-act="dec" data-id="${p.id}" aria-label="Quitar uno de ${sfEsc(p.name)}">−</button><span aria-live="polite">${n}</span><button type="button" data-act="inc" data-id="${p.id}" aria-label="Agregar uno de ${sfEsc(p.name)}" ${n >= p.stock ? 'disabled' : ''}>+</button></div>`;
@@ -117,7 +117,7 @@ function mountStore(el, init) {
   };
 
   /* ---------- Panel lateral del carrito ---------- */
-  const line = ({ p, n, sub }) => `<div class="sf-line"><div class="sf-lth">${p.images && p.images[0] ? `<img src="${sfEsc(p.images[0])}" alt="">` : sfEsc((p.name[0] || '?').toUpperCase())}</div>
+  const line = ({ p, n, sub }) => `<div class="sf-line"><div class="sf-lth">${p.images && p.images[0] ? `<img src="${sfEsc(sfThumb(p.images[0], 160))}" alt="">` : sfEsc((p.name[0] || '?').toUpperCase())}</div>
     <div class="sf-lbody"><strong>${sfEsc(p.name)}</strong><small>${sfArs(p.price)} c/u${n >= p.stock ? ' · máximo disponible' : ''}</small>${stepper(p, n, 'sm')}</div>
     <div class="sf-lside"><b>${sfArs(sub)}</b><button type="button" class="sf-rm" data-rm="${p.id}" aria-label="Quitar ${sfEsc(p.name)} del pedido">${SF_ICON.trash}</button></div></div>`;
   const drawLines = () => {

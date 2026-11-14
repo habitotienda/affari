@@ -87,3 +87,6 @@ function sfContrast(a, b) {
   /* Al volver a la pestaña, se vuelve a intentar lo que quedó roto */
   document.addEventListener('visibilitychange', () => { if (!document.hidden) failed.forEach(img => { img.dataset.rt = 1; img.classList.remove('sf-broken'); retry(img, 1); }); });
 })();
+
+/* Versión reducida de una foto de producto (/api/img/…): el servidor la achica; así el celular no decodifica fotos enormes. Otras URLs quedan igual. */
+const sfThumb = (u, w) => /^\/api\/img\//.test(u || '') ? u + (u.includes('?') ? '&' : '?') + 'w=' + w : u;
