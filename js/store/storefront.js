@@ -98,7 +98,30 @@ function mountStore(el, init) {
     $('[data-chips]').innerHTML = cats.length ? ['', ...cats].map(c => `<button type="button" class="sf-chip${c === cat ? ' on' : ''}" data-chip="${sfEsc(c)}">${c ? sfEsc(c) : 'Todos'}</button>`).join('') : '';
   };
   const nf = () => (flt.sort ? 1 : 0) + (flt.min !== '' ? 1 : 0) + (flt.max !== '' ? 1 : 0) + (flt.stock ? 1 : 0);
-  let lazyIO = null;
+  /* Lista por tandas: se dibujan PAGE productos y, al llegar al final, se agregan otros PAGE (y así hasta terminar).
+     Cada cambio de filtro, búsqueda o categoría vuelve a empezar desde la primera tanda. */
+  const PAGE = 12;
+  let lazyIOs = [], moreIO = null, curItems = [], shown = 0;
+  const listEl = () => $('[data-list]'), cardsNow = () => el.querySelectorAll('[data-list] .sf-card');
+  const scroller = () => embedded ? $('.sf') : null;
+  const stopObs = () => { lazyIOs.forEach(o => o && o.disconnect()); lazyIOs = []; if (moreIO) { moreIO.disconnect(); moreIO = null; } };
+  const moreBox = () => { const rest = curItems.length - shown; return rest > 0 ? `<div class="sf-pager" data-page><button type="button" class="sf-link" data-page-btn>Ver ${Math.min(PAGE, rest)} más · quedan ${rest}</button></div>` : ''; };
+  const loadMore = () => {
+    if (shown >= curItems.length) return;
+    const list = listEl(), box = list.querySelector('[data-page]'); if (box) box.remove();
+    const from = shown; shown = Math.min(curItems.length, shown + PAGE);
+    list.insertAdjacentHTML('beforeend', curItems.slice(from, shown).map(card).join('') + moreBox());
+    const fresh = [...cardsNow()].slice(from);
+    lazyIOs.push(sfLazyCards(fresh, scroller()));
+    if (window.sfImageGuard) sfImageGuard.watch(cardsNow());
+    watchMore(); requestAnimationFrame(markMore);
+  };
+  const watchMore = () => {
+    if (moreIO) { moreIO.disconnect(); moreIO = null; }
+    const box = listEl().querySelector('[data-page]'); if (!box || !('IntersectionObserver' in window)) return;   // sin IntersectionObserver queda el botón
+    moreIO = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) loadMore(); }, { root: scroller(), rootMargin: '700px 0px' });
+    moreIO.observe(box);
+  };
   const drawList = () => {
     const term = q.value.trim().toLowerCase(), mn = flt.min === '' ? 0 : +flt.min, mx = flt.max === '' ? Infinity : +flt.max;
     let items = live().filter(p => (!cat || p.category === cat) && (p.name + ' ' + (p.description || '') + ' ' + (p.category || '')).toLowerCase().includes(term)
@@ -107,9 +130,11 @@ function mountStore(el, init) {
     else if (flt.sort === 'az') items = [...items].sort((a, b) => a.name.localeCompare(b.name, 'es'));
     const n = nf(), fc = $('[data-fcount]'); fc.hidden = !n; fc.textContent = n;
     $('[data-meta]').textContent = items.length ? `${items.length} ${items.length === 1 ? 'producto' : 'productos'}${cat ? ' en ' + cat : ''}` : '';
-    $('[data-list]').innerHTML = items.length ? items.map(card).join('') : `<div class="sf-empty">No hay productos para mostrar.${n || term || cat ? '<br><button type="button" class="sf-link" data-reset>Quitar filtros y búsqueda</button>' : ''}</div>`;
-    if (lazyIO) lazyIO.disconnect(); lazyIO = sfLazyCards(el.querySelectorAll('[data-list] .sf-card'), embedded ? $('.sf') : null);
-    if (window.sfImageGuard) sfImageGuard.watch(el.querySelectorAll('[data-list] .sf-card'));      // comprueba que todas las fotos principales carguen y trae las que falten
+    stopObs(); curItems = items; shown = Math.min(PAGE, items.length);
+    listEl().innerHTML = items.length ? items.slice(0, shown).map(card).join('') + moreBox() : `<div class="sf-empty">No hay productos para mostrar.${n || term || cat ? '<br><button type="button" class="sf-link" data-reset>Quitar filtros y búsqueda</button>' : ''}</div>`;
+    lazyIOs.push(sfLazyCards(cardsNow(), scroller()));
+    if (window.sfImageGuard) sfImageGuard.watch(cardsNow());      // comprueba que todas las fotos principales carguen y trae las que falten
+    watchMore();
   };
 
   /* Barra flotante + insignia del botón del carrito */
@@ -248,6 +273,7 @@ function mountStore(el, init) {
     const fb = T.closest('[data-open-filters]');
     if (fb) { const pn = $('[data-fpanel]'); pn.hidden = !pn.hidden; return fb.setAttribute('aria-expanded', String(!pn.hidden)); }
     if (T.closest('[data-fclear],[data-reset]')) { flt = { sort: '', min: '', max: '', stock: false }; cat = ''; q.value = ''; el.querySelectorAll('[data-fl]').forEach(i => { if (i.type === 'checkbox') i.checked = false; else i.value = ''; }); drawChips(); return drawList(); }
+    if (T.closest('[data-page-btn]')) return loadMore();
     if (T.closest('[data-open-cart]')) return openDrawer();
     if (T.closest('[data-send]')) return send();
     if (T.closest('.sf-lb')) { if (T.closest('[data-close]') || T.classList.contains('sf-lb')) closeLightbox(); return; }

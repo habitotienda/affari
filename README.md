@@ -147,3 +147,6 @@ falta implementar `request_cae()` en `backend/afip.py` (WSAA + WSFE) con el cert
 4. Mercado Pago: webhook `https://TU-APP.onrender.com/api/billing/webhook`.
 5. Keep-alive (elegí uno): **UptimeRobot** (monitor HTTP a `https://TU-APP.onrender.com/ping`, intervalo ≤ 10 min) · **GitHub Actions** (`.github/workflows/keep-alive.yml` + secret `RENDER_URL`) · `python keep_alive.py URL` en una PC siempre encendida.
 
+
+## Catálogo por tandas de 12
+La lista de productos dibuja 12 y, al llegar al final, agrega otros 12 (y así hasta terminar; sin `IntersectionObserver` queda un botón «Ver N más»). Cualquier cambio de búsqueda, categoría o filtro vuelve a empezar desde la primera tanda. El verificador de fotos (`js/store/imageguard.js`) solo vigila las tarjetas ya dibujadas. Código: `PAGE`, `loadMore` y `drawList` en `js/store/storefront.js`.
