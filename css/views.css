@@ -170,3 +170,26 @@
 .photo-ai .pai-wait{animation:ai-pulse .8s ease-in-out infinite alternate;color:#8B5CF6;font-size:13px}
 .photo-ai .pai-err{color:#B91C1C;font-size:13px}
 @media(max-width:520px){.photo-ai .pai-pair{grid-template-columns:1fr}}
+
+/* ---- Botones sobre cada foto del producto: crop y IA apilados a la izquierda, quitar a la derecha; más grandes al tacto ---- */
+.gal-it>.gal-ai{top:27px;left:3px}
+@media(pointer:coarse){
+  .gal-it>button[data-rm],.gal-it>.gal-crop,.gal-it>.gal-ai{width:28px;height:28px;font-size:18px}
+  .gal-it>.gal-crop{top:4px;left:4px}.gal-it>.gal-ai{top:36px;left:4px}.gal-it>button[data-rm]{top:4px;right:4px}
+  .gal-it>.gal-crop svg,.gal-it>.gal-ai svg{width:15px;height:15px}
+  .gal-it em,.gal-it .mk{font-size:11px;padding:4px 2px}
+}
+/* Modal «Foto con IA»: siempre dentro de la pantalla y con botones ordenados en el celular */
+.photo-ai-ov{overflow:hidden;box-sizing:border-box;width:100%;max-width:100vw}
+.photo-ai{box-sizing:border-box;min-width:0;max-width:100%;max-height:94dvh;overscroll-behavior:contain}
+.photo-ai>*{min-width:0}
+.photo-ai .pai-styles{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;padding-bottom:2px}.photo-ai .pai-styles::-webkit-scrollbar{display:none}
+.photo-ai .pai-styles button{flex:none;white-space:nowrap}
+@media(max-width:520px){
+  .photo-ai .pai-pair{grid-template-columns:1fr 1fr}
+  .photo-ai .pai-foot{display:grid;grid-template-columns:1fr 1fr}
+  .photo-ai .pai-foot .btn{width:100%;justify-content:center}
+  .photo-ai .pai-foot [data-use]{grid-column:1/-1}
+}
+/* La página nunca se desplaza de costado en el celular (corría los modales fuera de la pantalla) */
+html,body{max-width:100%;overflow-x:clip}

@@ -217,9 +217,10 @@ function openPhotoAI({ src, name, category, onUse }) {
     if (busy) return; busy = true; go.disabled = true; err.hidden = true; add.hidden = use.hidden = true;
     after.innerHTML = '<span class="pai-wait">Generando… puede tardar unos segundos</span>';
     try {
-      const r = await httpRequest(src ? '/ai/image/enhance' : '/ai/image/create', { method: 'POST', timeout: 110000,
+      const r = await api(src ? '/ai/image/enhance' : '/ai/image/create', { method: 'POST', timeout: 110000,
         body: src ? { image: src, name, style, product_id: onUse.productId || null } : { name, category, style } });
-      result = r.image; after.innerHTML = ''; const im = new Image(); im.alt = 'Foto generada con IA'; im.src = result; after.appendChild(im);
+      if (!r || typeof r.image !== 'string' || !r.image.startsWith('data:image/')) throw new Error('La IA no devolvió una imagen. Probá de nuevo.');
+      result = r.image; after.innerHTML = ''; const im = new Image(); im.alt = 'Foto generada con IA'; im.onerror = () => { after.innerHTML = '<span class="muted">No se pudo mostrar la imagen. Probá de nuevo.</span>'; use.hidden = add.hidden = true; result = ''; }; im.src = result; after.appendChild(im);
       use.hidden = false; add.hidden = !src || !onUse.canAdd(); go.querySelector('span').textContent = 'Probar de nuevo';
     } catch (e) {
       after.innerHTML = '<span class="muted">No se pudo generar</span>'; err.textContent = e.message || 'No se pudo generar la foto.'; err.hidden = false;
