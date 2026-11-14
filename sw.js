@@ -3,8 +3,11 @@
    - /api/*: siempre a la red (nunca se cachean datos de negocio ni sesiones).
    - Sin conexión: se abre la app y se muestra la pantalla de reintento.
    Al publicar cambios, subí el número de VERSION para que todos reciban la versión nueva. */
-const VERSION = 'v29';
+const VERSION = 'v30';
 const CACHE = `affari-${VERSION}`;
+/* Fotos de productos (/api/img/<id>/<n>?v=<versión>&w=<ancho>): la URL lleva la versión, así que la copia guardada nunca queda vieja
+   (si cambia la foto, cambia la URL). Caché aparte y SIN versión del SW para que sobreviva a las actualizaciones; se recorta a IMG_MAX. */
+const IMG_CACHE = 'imgs-v1', IMG_MAX = 400;
 const PRECACHE = [
   '/',
   '/css/styles.css',
@@ -76,6 +79,18 @@ self.addEventListener('fetch', event => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;               // fuentes de Google, etc.: que las maneje el navegador
+  if (/^\/api\/img\/\d+\/\d+$/.test(url.pathname) && url.searchParams.has('v')) {   // fotos: caché primero (instantáneas al volver)
+    event.respondWith(caches.open(IMG_CACHE).then(async c => {
+      const hit = await c.match(req); if (hit) return hit;
+      const res = await fetch(req);
+      if (res.ok && !res.redirected && !url.searchParams.has('_r') && !url.searchParams.has('_g')) {   // ni redirecciones (versión vieja) ni reintentos con marca
+        await c.put(req, res.clone());
+        c.keys().then(ks => { if (ks.length > IMG_MAX) ks.slice(0, ks.length - IMG_MAX).forEach(k => c.delete(k)); });
+      }
+      return res;
+    }));
+    return;
+  }
   if (url.pathname.startsWith('/api/')) return;                  // datos: siempre en vivo
 
   // Páginas: red primero (para ver siempre lo último); sin red, la copia guardada.

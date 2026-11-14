@@ -13,7 +13,7 @@ function sfGallery(p) {
       <div class="sf-thumbs">${imgs.map((s, i) => `<button type="button" data-th="${i}" class="${i ? '' : 'on'}" aria-label="Ver foto ${i + 1}"><img data-src="${sfEsc(sfThumb(s, 160))}" alt="" decoding="async"></button>`).join('')}</div>` : '');
 }
 
-/* Foto principal de cada tarjeta: se descarga cuando la tarjeta está a menos de ~2 pantallas de distancia (no con el loading="lazy" nativo,
+/* Foto principal de cada tarjeta: se descarga cuando la tarjeta está a menos de ~600 px de la pantalla (lo de más abajo espera hasta que el visitante se acerca) (no con el loading="lazy" nativo,
    que con scroll rápido y content-visibility llega tarde y deja las fotos en blanco). (Los reintentos por error ya los maneja utils.js). */
 function sfFirstLoad(card) {
   card.querySelectorAll('img[data-first]').forEach(im => {
@@ -23,7 +23,7 @@ function sfFirstLoad(card) {
 function sfLazyCards(cards, root) {
   cards = [...cards];
   if (!('IntersectionObserver' in window)) { cards.forEach(sfFirstLoad); return null; }
-  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { sfFirstLoad(e.target); io.unobserve(e.target); } }), { root: root || null, rootMargin: '1800px 0px' });
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { sfFirstLoad(e.target); io.unobserve(e.target); } }), { root: root || null, rootMargin: '600px 0px' });
   cards.forEach(c => io.observe(c));
   return io;
 }

@@ -1,4 +1,4 @@
-/* node tests/js/imageguard.test.js — sfImageGuard: detecta fotos principales sin cargar y las carga (DOM simulado) */
+/* node tests/js/imageguard.test.js — sfImageGuard: detecta fotos principales sin cargar y carga las cercanas; las lejanas esperan (DOM simulado) */
 const fs = require('fs'), assert = require('assert');
 const src = fs.readFileSync(__dirname + '/../../js/store/imageguard.js', 'utf8');
 
@@ -44,18 +44,26 @@ new Function(src)();
 
   const g = window.sfImageGuard; assert(g, 'se registra window.sfImageGuard');
   g.watch(imgs.map(mkCard));
-  let s = g.status(); assert.strictEqual(s.total, 16); assert(!s.done);
-  assert.strictEqual(s.pending, 12); assert.strictEqual(s.broken, 2);
+  let s = g.status(); assert(!s.done);
+  const far = imgs.slice(1, 13).filter(i => i.top > 800 + 900);                 // más de 900 px fuera de la pantalla
+  const near = imgs.slice(1, 13).filter(i => i.top <= 800 + 900);
+  assert(far.length > 0 && near.length > 0, 'el escenario tiene cercanas y lejanas');
+  assert.strictEqual(s.total, 16 - far.length, 'las lejanas todavía no cuentan');
   const retried = []; window.sfImgRetry = i => { retried.push(i); i.classList.remove('sf-broken'); i.src = i.dataset.src0 || i.getAttribute('src'); };
-  await new Promise(r => setTimeout(r, 14000));
+  await new Promise(r => setTimeout(r, 9000));
   s = g.status();
   assert(maxInflight <= 4 + 1, 'concurrencia limitada: ' + maxInflight);
-  assert.strictEqual(s.pending, 0, 'todas las pendientes se pidieron');
-  assert.strictEqual(imgs.slice(1, 13).filter(i => i.naturalWidth > 0).length, 12, 'las 12 diferidas cargaron');
+  assert.strictEqual(near.filter(i => i.naturalWidth > 0).length, near.length, 'las cercanas cargaron');
+  assert(far.every(i => i.hasAttribute('data-first') && i.naturalWidth === 0), 'las lejanas NO se descargaron');
+  assert(!requested.some(u => far.some(i => i.dataset.first === u)), 'ni se pidieron');
   assert(imgs[14].naturalWidth > 0, 'la rota recuperable se recupera');
-  assert.strictEqual(s.failed, 1, 'la inexistente queda como fallida tras ' + 3 + ' rondas'); assert(s.done, 'termina aunque una sea imposible');
+  assert.strictEqual(s.failed, 1, 'la inexistente queda como fallida tras 3 rondas'); assert(s.done, 'termina aunque una sea imposible');
+  // el visitante se acerca (scroll): las lejanas pasan a cercanas y se cargan
+  far.forEach(i => { i.top = 300; }); g.watch(imgs.map(mkCard));
+  await new Promise(r => setTimeout(r, 3000));
+  assert(far.every(i => i.naturalWidth > 0), 'al acercarse se cargan');
   // orden: la más cercana a la pantalla primero
-  assert.strictEqual(requested[0], '/api/img/21/0?v=a&w=640', 'primero la más cercana (arriba)');
+  assert(requested.length && !/dead/.test(requested[0]), 'arranca por las cercanas');
   // desde la 2.ª ronda se pide la original sin w=
   assert(requested.some(u => u.includes('dead') && !/w=\d+/.test(u)), 'cae a la foto original');
   assert(events.length > 1 && events[events.length - 1].done, 'emite eventos de estado');

@@ -148,5 +148,8 @@ falta implementar `request_cae()` en `backend/afip.py` (WSAA + WSFE) con el cert
 5. Keep-alive (elegí uno): **UptimeRobot** (monitor HTTP a `https://TU-APP.onrender.com/ping`, intervalo ≤ 10 min) · **GitHub Actions** (`.github/workflows/keep-alive.yml` + secret `RENDER_URL`) · `python keep_alive.py URL` en una PC siempre encendida.
 
 
-## Catálogo por tandas de 12
-La lista de productos dibuja 12 y, al llegar al final, agrega otros 12 (y así hasta terminar; sin `IntersectionObserver` queda un botón «Ver N más»). Cualquier cambio de búsqueda, categoría o filtro vuelve a empezar desde la primera tanda. El verificador de fotos (`js/store/imageguard.js`) solo vigila las tarjetas ya dibujadas. Código: `PAGE`, `loadMore` y `drawList` en `js/store/storefront.js`.
+## Catálogo por tandas y fotos bajo demanda
+- **Tandas:** la lista dibuja 8 productos en celular (ancho < 700 px) o 12 en compu/tablet y, al acercarse al final, agrega otros tantos (sin `IntersectionObserver` queda el botón «Ver N más»). Buscar, filtrar o cambiar de categoría empieza de nuevo. Código: `pageSize`, `loadMore`, `drawList` en `js/store/storefront.js`.
+- **Fotos bajo demanda:** al iniciar solo se piden las miniaturas visibles (y las que están a menos de ~600 px, `sfLazyCards`); lo de más abajo espera hasta que el visitante se acerca. Las demás fotos de cada producto se piden al tocar/pasar el mouse por su galería o al abrir el producto (tocar el nombre; se ve toda la galería).
+- **Verificador** (`js/store/imageguard.js`): solo vigila las fotos en pantalla o cerca (≤ 900 px); repone las que no empezaron a bajar, perdieron el `src` o quedaron rotas (3 rondas, desde la 2.ª pide la original). Las lejanas no se tocan. `sfImageGuard.status()` y el evento `sf:images` informan el estado.
+- **Caché:** `sw.js` guarda `/api/img/<id>/<n>?v=…` (cache-first, hasta 400 fotos, caché `imgs-v1` que no se borra al subir `VERSION`). La URL lleva la versión, así que solo se reutilizan fotos vigentes; si cambia la foto cambia la URL. Al volver se ven sin pedirlas al servidor. La página pública `/c/<slug>` ahora también registra el service worker.

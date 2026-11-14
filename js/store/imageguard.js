@@ -2,8 +2,9 @@
    La primera foto de cada producto se baja de forma diferida (sfLazyCards) y utils.js reintenta las que fallan o se cuelgan, pero nada comprobaba
    que, al final, TODAS hubieran quedado cargadas: una foto lejana nunca iniciada, una que perdió su src o una que agotó los reintentos
    se quedaban en blanco hasta que el visitante tocaba o volvía a entrar.
-   sfImageGuard revisa cada tarjeta de la lista y se ocupa de lo que falta:
-   · sin iniciar  -> la descarga en segundo plano, las más cercanas a la pantalla primero y pocas a la vez (no satura al servidor ni la memoria);
+   sfImageGuard revisa las tarjetas de la lista y se ocupa de lo que falta, SOLO de las que están en pantalla o cerca (NEAR px).
+   Las lejanas esperan: no se baja nada que el visitante todavía no esté por ver. Al hacer scroll se vuelve a revisar.
+   · sin iniciar  -> la descarga (si el lazy-load no llegó), las más cercanas primero y pocas a la vez;
    · sin src      -> la repone con la URL que tenía;
    · rota         -> (sf-broken, o terminó de cargar sin ancho) la reintenta hasta 3 rondas y, desde la 2.ª, pide la foto original en vez de la miniatura;
    · en reintento -> no la toca: de esas se encarga utils.js (así no se duplican pedidos).
@@ -15,6 +16,7 @@
   const CONC = 4,            // descargas simultáneas iniciadas por el verificador
     ROUNDS = 3,              // rondas de reintento para una foto rota antes de darla por perdida
     RUN_MAX = 45000,         // una descarga iniciada por el verificador se considera colgada a los 45 s
+    NEAR = 900,              // px (arriba o abajo de la pantalla) dentro de los que una foto sin pedir ya se considera «por ver»
     FAST = 350, SLOW = 3000; // cada cuánto revisa: con descargas en curso / en espera
   let cards = [], timer = null, last = '';
   const run = new Map(), rounds = new WeakMap(), want = new WeakMap();   // img -> inicio · img -> rondas · img -> URL original
@@ -35,7 +37,8 @@
   function status() {
     const s = { total: 0, ok: 0, loading: 0, pending: 0, broken: 0, failed: 0, done: false };
     imgs().forEach(img => {
-      s.total++; const st = stateOf(img);
+      const st = stateOf(img); if ((st === 'pending' || st === 'lost') && dist(img) > NEAR) return;   // lejana: todavía no cuenta
+      s.total++;
       if (st === 'ok') s.ok++; else if (st === 'loading') s.loading++; else if (st === 'pending' || st === 'lost') s.pending++;
       else { s.broken++; if ((rounds.get(img) || 0) >= ROUNDS) s.failed++; }
     });
@@ -64,7 +67,7 @@
     for (const [img, t] of run) { const st = stateOf(img); if (!img.isConnected || st === 'ok' || st === 'broken' || st === 'lost' || now - t > RUN_MAX) run.delete(img); }
     if (!document.hidden && navigator.onLine !== false) {
       const todo = list.filter(i => !run.has(i)).map(i => [i, stateOf(i)])
-        .filter(([i, st]) => st === 'pending' || st === 'lost' || (st === 'broken' && (rounds.get(i) || 0) < ROUNDS))
+        .filter(([i, st]) => ((st === 'pending' || st === 'lost') && dist(i) <= NEAR) || (st === 'broken' && (rounds.get(i) || 0) < ROUNDS))
         .sort((a, b) => dist(a[0]) - dist(b[0]));
       todo.slice(0, Math.max(0, CONC - run.size)).forEach(([i, st]) => begin(i, st));
     }
@@ -75,6 +78,7 @@
   const kick = (ms = 0) => { if (!timer || ms === 0) { clearTimeout(timer); timer = setTimeout(tick, ms); } };
 
   const revive = () => { imgs().forEach(i => { if (stateOf(i) === 'broken') rounds.set(i, 0); }); kick(); };
+  let st0 = 0; document.addEventListener('scroll', () => { if (!st0) st0 = setTimeout(() => { st0 = 0; if (cards.length) kick(); }, 250); }, { capture: true, passive: true });   // al acercarse a más fotos, vuelve a revisar
   addEventListener('online', revive); addEventListener('pageshow', revive);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) revive(); });
   document.addEventListener('load', e => { if (e.target instanceof HTMLImageElement && run.has(e.target)) kick(); }, true);   // terminó una: arranca la siguiente sin esperar

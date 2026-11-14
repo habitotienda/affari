@@ -396,3 +396,5 @@
 
 /* Lista por tandas de 12: el aviso de «ver más» ocupa toda la fila de la grilla */
 .sf-pager{grid-column:1/-1;text-align:center;padding:18px 0 8px;min-height:56px}
+.sf-dimg{cursor:zoom-in}.sf-dmore{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.sf-dmore img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;cursor:zoom-in;background:var(--soft);color:transparent;font-size:0}
+[data-list] .sf-info h3{cursor:pointer}

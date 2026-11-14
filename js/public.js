@@ -2,6 +2,7 @@
    - Si el servidor está despertando (Render gratis se duerme) reintenta solo, con aviso, en vez de mostrar un error.
    - Guarda la última versión del catálogo en el navegador: al volver se ve al instante y se actualiza de fondo. */
 (async () => {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});   // para que las fotos queden guardadas y al volver carguen al instante
   const root = document.getElementById('root'), slug = location.pathname.split('/')[2] || '', KEY = 'affari:pub:' + slug;
   let mounted = null;
   const show = data => {

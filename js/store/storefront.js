@@ -98,18 +98,18 @@ function mountStore(el, init) {
     $('[data-chips]').innerHTML = cats.length ? ['', ...cats].map(c => `<button type="button" class="sf-chip${c === cat ? ' on' : ''}" data-chip="${sfEsc(c)}">${c ? sfEsc(c) : 'Todos'}</button>`).join('') : '';
   };
   const nf = () => (flt.sort ? 1 : 0) + (flt.min !== '' ? 1 : 0) + (flt.max !== '' ? 1 : 0) + (flt.stock ? 1 : 0);
-  /* Lista por tandas: se dibujan PAGE productos y, al llegar al final, se agregan otros PAGE (y así hasta terminar).
+  /* Lista por tandas: se dibujan 8 productos (celular) o 12 (compu) y, al llegar al final, se agregan otros tantos (y así hasta terminar).
      Cada cambio de filtro, búsqueda o categoría vuelve a empezar desde la primera tanda. */
-  const PAGE = 12;
+  const pageSize = () => (embedded ? el.clientWidth : innerWidth) < 700 ? 8 : 12;      // celular de 8 en 8, compu/tablet de 12 en 12
   let lazyIOs = [], moreIO = null, curItems = [], shown = 0;
   const listEl = () => $('[data-list]'), cardsNow = () => el.querySelectorAll('[data-list] .sf-card');
   const scroller = () => embedded ? $('.sf') : null;
   const stopObs = () => { lazyIOs.forEach(o => o && o.disconnect()); lazyIOs = []; if (moreIO) { moreIO.disconnect(); moreIO = null; } };
-  const moreBox = () => { const rest = curItems.length - shown; return rest > 0 ? `<div class="sf-pager" data-page><button type="button" class="sf-link" data-page-btn>Ver ${Math.min(PAGE, rest)} más · quedan ${rest}</button></div>` : ''; };
+  const moreBox = () => { const rest = curItems.length - shown; return rest > 0 ? `<div class="sf-pager" data-page><button type="button" class="sf-link" data-page-btn>Ver ${Math.min(pageSize(), rest)} más · quedan ${rest}</button></div>` : ''; };
   const loadMore = () => {
     if (shown >= curItems.length) return;
     const list = listEl(), box = list.querySelector('[data-page]'); if (box) box.remove();
-    const from = shown; shown = Math.min(curItems.length, shown + PAGE);
+    const from = shown; shown = Math.min(curItems.length, shown + pageSize());
     list.insertAdjacentHTML('beforeend', curItems.slice(from, shown).map(card).join('') + moreBox());
     const fresh = [...cardsNow()].slice(from);
     lazyIOs.push(sfLazyCards(fresh, scroller()));
@@ -130,7 +130,7 @@ function mountStore(el, init) {
     else if (flt.sort === 'az') items = [...items].sort((a, b) => a.name.localeCompare(b.name, 'es'));
     const n = nf(), fc = $('[data-fcount]'); fc.hidden = !n; fc.textContent = n;
     $('[data-meta]').textContent = items.length ? `${items.length} ${items.length === 1 ? 'producto' : 'productos'}${cat ? ' en ' + cat : ''}` : '';
-    stopObs(); curItems = items; shown = Math.min(PAGE, items.length);
+    stopObs(); curItems = items; shown = Math.min(pageSize(), items.length);
     listEl().innerHTML = items.length ? items.slice(0, shown).map(card).join('') + moreBox() : `<div class="sf-empty">No hay productos para mostrar.${n || term || cat ? '<br><button type="button" class="sf-link" data-reset>Quitar filtros y búsqueda</button>' : ''}</div>`;
     lazyIOs.push(sfLazyCards(cardsNow(), scroller()));
     if (window.sfImageGuard) sfImageGuard.watch(cardsNow());      // comprueba que todas las fotos principales carguen y trae las que falten
@@ -200,12 +200,13 @@ function mountStore(el, init) {
     ps.forEach((p, i) => { const b = p.nextElementSibling; if (b && b.hasAttribute('data-more')) b.hidden = !over[i]; });
   };
   const openDetail = p => {
-    if (detail || !p) return; opener = document.activeElement; const out = p.stock <= 0, img = p.images && p.images[0];
-    detail = { pushed: !embedded };
+    if (detail || !p) return; opener = document.activeElement; const out = p.stock <= 0, img = p.images && p.images[0], rest = (p.images || []).slice(1, SF_MAX_IMG);   // al abrir el producto se bajan las fotos restantes (la primera ya está en caché)
+    detail = { pushed: !embedded, p };
     layer.insertAdjacentHTML('beforeend', `<div class="sf-scrim" data-close-detail></div>
       <section class="sf-detail" role="dialog" aria-modal="true" aria-label="${sfEsc(p.name)}">
         <header class="sf-dth"><h2>${sfEsc(p.name)}</h2><button type="button" class="sf-x" data-close-detail aria-label="Cerrar">${SF_ICON.close}</button></header>
-        <div class="sf-dbody">${img ? `<img class="sf-dimg" src="${sfEsc(sfThumb(img, 800))}" alt="${sfEsc(p.name)}">` : ''}
+        <div class="sf-dbody">${img ? `<img class="sf-dimg" src="${sfEsc(sfThumb(img, 640))}" alt="${sfEsc(p.name)}" data-dz="0">` : ''}
+          ${rest.length ? `<div class="sf-dmore">${rest.map((s, k) => `<img src="${sfEsc(sfThumb(s, 640))}" alt="${sfEsc(p.name)} (foto ${k + 2} de ${rest.length + 1})" decoding="async" data-dz="${k + 1}">`).join('')}</div>` : ''}
           <div class="sf-row"><span class="sf-price">${sfArs(p.price)}</span>${out ? '<span class="sf-stock">Agotado</span>' : `<span class="sf-stock">Stock ${p.stock}</span>`}</div>
           <p class="sf-dtext">${sfEsc(p.description || '')}</p></div>
         <footer class="sf-dfoot"><div data-step="${p.id}">${stepHTML(p)}</div></footer></section>`);
@@ -262,6 +263,7 @@ function mountStore(el, init) {
     const T = e.target, a = T.closest('[data-act]'), rm = T.closest('[data-rm]'), ch = T.closest('[data-chip]');
     const vm = T.closest('[data-vmode]');
     if (vm) { vsaved = vm.dataset.vmode; try { VKEY && localStorage.setItem(VKEY, vsaved); } catch {} applyView(); return requestAnimationFrame(markMore); }
+    const nm = T.closest('[data-list] .sf-info h3'); if (nm) { const pid = nm.closest('.sf-card').querySelector('[data-step]').dataset.step; return openDetail(byId(+pid)); }   // tocar el nombre abre el producto
     const mo = T.closest('[data-more]'); if (mo) return openDetail(byId(+mo.dataset.more));
     if (T.closest('[data-close-detail]')) return closeDetail();
     if (a) return cart.add(+a.dataset.id, a.dataset.act === 'inc' ? 1 : -1);
@@ -279,6 +281,7 @@ function mountStore(el, init) {
     if (T.closest('.sf-lb')) { if (T.closest('[data-close]') || T.classList.contains('sf-lb')) closeLightbox(); return; }
     if (T.closest('[data-close-drawer]')) return closeDrawer();
     if (sfGalleryClick(e)) return;
+    const dz = T.closest('[data-dz]'); if (dz && detail) return openLightbox(detail.p, +dz.dataset.dz);
     const z = T.closest('[data-zoom]');
     if (z) { const p = byId(+z.dataset.zoom); if (p) openLightbox(p, Math.round(z.scrollLeft / z.clientWidth)); return; }
     if (ch) { cat = ch.dataset.chip; drawChips(); drawList(); }
