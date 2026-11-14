@@ -43,5 +43,3 @@ textarea.sv-in{resize:vertical}
 @media(max-width:700px){.sv{place-items:end center}.sv-box{height:100dvh;max-width:100%;border-radius:0;animation:sheet .26s both}}
 .sv-nm{flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.25}.sv-item.col .sv-r>.sv-th{width:48px;height:48px}
 .sv-imp .btn{flex:1;justify-content:center}
-
-.sv-sum .g{font-weight:800;color:#1a9d55;margin-top:2px}.sv-sum .g.neg{color:#d93a3a}.sv-sum small{display:block;margin-top:4px;font-size:12px}
