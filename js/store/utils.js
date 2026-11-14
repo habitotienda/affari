@@ -64,28 +64,55 @@ function sfContrast(a, b) {
   const x = L(a), y = L(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
 }
 
-/* Fotos que no cargan (servidor dormido, red lenta, pedidos en paralelo): se reintentan solas hasta 6 veces con espera creciente,
-   y también al volver la conexión. Sirve para el catálogo, el panel de productos y el visor. */
+/* Cargador de fotos con autorreparación (catálogo, panel, ventas, visor).
+   Antes solo se reintentaba cuando el navegador avisaba de un error; pero una foto puede quedarse «cargando» para siempre sin avisar nada
+   (servidor dormido en Render, conexión cortada a medias, pedidos en cola). Ahora:
+   1) error  -> reintenta con espera creciente (hasta 8 veces) y una marca _r para saltar cualquier respuesta rota en caché;
+   2) colgada -> si una foto visible no terminó de bajar a los 8 s (12 s, 16 s… si ya falló antes), se la vuelve a pedir;
+   3) rota    -> queda con la clase sf-broken y un toque sobre ella (o volver a la pestaña / recuperar internet) la reintenta;
+   4) solo reintenta fotos que están cerca de la pantalla, así no rompe la carga diferida de las demás. */
 (() => {
   if (window.__sfImgRetry) return; window.__sfImgRetry = true;
-  const MAX = 6, bust = (u, n) => u.replace(/([?&])_r=\d+&?/, '$1').replace(/[?&]$/, '') + (u.includes('?') ? '&' : '?') + '_r=' + n;
-  const failed = new Set();
+  const MAX = 8, STALL = 8000, ours = u => /^\/api\/img\//.test(u || '');
+  const bust = (u, n) => u.replace(/([?&])_r=\d+&?/, '$1').replace(/[?&]$/, '') + (u.includes('?') ? '&' : '?') + '_r=' + n;
+  const failed = new Set(), watch = new Map();             // img -> temporizador de «colgada»
+  const near = img => { if (!img.isConnected) return false; const r = img.getBoundingClientRect(); return (r.width || r.height) && r.bottom > -1500 && r.top < innerHeight + 1500 && r.right > -1500 && r.left < innerWidth + 1500; };
+  const stop = img => { clearTimeout(watch.get(img)); watch.delete(img); };
   const retry = (img, n) => {
+    stop(img);
     if (!img.isConnected) return failed.delete(img);
-    img.loading = 'eager'; img.src = bust(img.dataset.src0, n);
+    img.dataset.rt = n; img.loading = 'eager'; img.classList.remove('sf-broken');
+    img.src = bust(img.dataset.src0 || img.getAttribute('src'), n); arm(img);
   };
+  const arm = img => {
+    const src = img.getAttribute('src'); if (!ours(src) && !ours(img.dataset.src0)) return;
+    stop(img);
+    const n = +(img.dataset.rt || 0);
+    watch.set(img, setTimeout(() => {
+      watch.delete(img);
+      if (!img.isConnected || (img.complete && img.naturalWidth)) return;
+      if (!near(img) || document.hidden) return arm(img);   // fuera de pantalla o pestaña en segundo plano: se espera
+      if (n >= MAX) { img.classList.add('sf-broken'); failed.add(img); return; }
+      img.dataset.src0 = img.dataset.src0 || src; retry(img, n + 1);
+    }, STALL + n * 4000 + Math.random() * 1500));
+  };
+  const revive = () => failed.forEach(img => retry(img, 1));
   document.addEventListener('error', e => {
     const img = e.target; if (!(img instanceof HTMLImageElement)) return;
     const src = img.dataset.src0 || img.getAttribute('src') || ''; if (!src || src.startsWith('data:') || src.startsWith('blob:')) return;
-    img.dataset.src0 = src;
+    img.dataset.src0 = src; stop(img);
     const n = +(img.dataset.rt || 0) + 1; img.dataset.rt = n;
     if (n > MAX) { img.classList.add('sf-broken'); failed.add(img); return; }
-    setTimeout(() => navigator.onLine === false ? failed.add(img) : retry(img, n), Math.min(600 * 2 ** (n - 1), 6000) + Math.random() * 400);   // con un poco de azar para que no vuelvan todas juntas
+    setTimeout(() => navigator.onLine === false ? failed.add(img) : retry(img, n), Math.min(500 * 2 ** (n - 1), 6000) + Math.random() * 400);   // con un poco de azar para que no vuelvan todas juntas
   }, true);
-  document.addEventListener('load', e => { const img = e.target; if (img instanceof HTMLImageElement && img.dataset.rt) { delete img.dataset.rt; img.classList.remove('sf-broken'); failed.delete(img); } }, true);
-  addEventListener('online', () => failed.forEach(img => { img.dataset.rt = 1; img.classList.remove('sf-broken'); retry(img, 1); }));
-  /* Al volver a la pestaña, se vuelve a intentar lo que quedó roto */
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) failed.forEach(img => { img.dataset.rt = 1; img.classList.remove('sf-broken'); retry(img, 1); }); });
+  document.addEventListener('load', e => { const img = e.target; if (!(img instanceof HTMLImageElement)) return; stop(img); if (img.dataset.rt) { delete img.dataset.rt; failed.delete(img); } img.classList.remove('sf-broken'); }, true);
+  addEventListener('online', revive); addEventListener('pageshow', revive);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) revive(); });
+  document.addEventListener('click', e => { const img = e.target instanceof HTMLImageElement ? e.target : e.target.querySelector && e.target.querySelector('img.sf-broken'); if (img && failed.has(img)) retry(img, 1); }, true);
+  /* Toda foto nuestra que aparezca (o cambie de src) empieza a ser vigilada */
+  const seen = n => { if (n.nodeType !== 1) return; (n.tagName === 'IMG' ? [n] : n.querySelectorAll ? [...n.querySelectorAll('img')] : []).forEach(i => { if (i.getAttribute('src') && !i.complete) arm(i); }); };
+  new MutationObserver(ms => ms.forEach(m => m.type === 'attributes' ? (m.target.getAttribute('src') && !m.target.complete && arm(m.target)) : m.addedNodes.forEach(seen)))
+    .observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
 })();
 
 /* Versión reducida de una foto de producto (/api/img/…): el servidor la achica; así el celular no decodifica fotos enormes. Otras URLs quedan igual. */

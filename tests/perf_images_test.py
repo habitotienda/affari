@@ -58,10 +58,14 @@ print("1 OK  (listado sin base64:", len(json.dumps(out)), "bytes)")
 # 2) endpoint de imagen: sirve el archivo, cache inmutable, versión incorrecta = 404
 r = A.product_image(pid, 0, v1)
 assert r.media_type == "image/jpeg" and r.content == base64.b64decode(img1.split(",")[1]) and "immutable" in r.headers["Cache-Control"]
-for bad in ((pid, 0, "deadbeef"), (pid, 5, v1), (999, 0, v1)):
+for bad in ((pid, 5, v1), (999, 0, v1)):                   # foto o producto que no existen = 404
     try: A.product_image(*bad); raise SystemExit("debía dar 404")
     except HTTPException as e: assert e.status_code == 404
-print("2 OK  (imagen cacheable + 404)")
+rd = A.product_image(pid, 0, "deadbeef")                    # versión vieja = redirige a la vigente (antes: foto rota para siempre)
+assert rd.status_code == 307 and rd.headers["location"] == f"/api/img/{pid}/0?v={v1}" and "no-store" in rd.headers["Cache-Control"], rd.headers
+rt = A.product_image(pid, 0, "deadbeef", 160)
+assert rt.status_code == 307 and rt.headers["location"].endswith("&w=160")
+print("2 OK  (imagen cacheable + 404 real + redirección de versión vieja)")
 
 # 3) editar el producto desde el navegador: las fotos viejas vuelven como URL y se conservan; la nueva llega en base64
 cur = A.list_products(u)[0]["images"]

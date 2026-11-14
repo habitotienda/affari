@@ -166,6 +166,8 @@ MIGRATIONS = [
     ("products", "img_n", "INTEGER NOT NULL DEFAULT 0"), ("products", "img_v", "TEXT NOT NULL DEFAULT ''"),
     # Horarios de atención (JSON, ver hours.py) e inicio de sesión con Google (identificador "sub" de la cuenta de Google)
     ("stores", "hours", "TEXT"), ("users", "google_sub", "TEXT"),
+    # Ventas con varios productos: todas las filas de una misma venta comparten `ticket` (y el nombre que se le puso)
+    ("sales", "ticket", "TEXT"), ("sales", "ticket_concept", "TEXT"),
 ]
 
 def img_meta(images):
@@ -231,5 +233,6 @@ def init_db():
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_sub)")      # varios NULL permitidos; un Google = una cuenta
         c.execute("CREATE INDEX IF NOT EXISTS idx_sales_product ON sales(store_id, product_id)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_sales_invoice ON sales(invoice_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_sales_ticket ON sales(store_id, ticket)")
         backfill_sale_items(c)
         backfill_images(c)

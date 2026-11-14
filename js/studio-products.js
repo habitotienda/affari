@@ -220,7 +220,7 @@
         const q = S.q.trim().toLowerCase();
         return (S.all || []).filter(p => !q || (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q));
       };
-      const thumb = (p) => p.images && p.images[0] ? `<img src="${esc(p.images[0])}" alt="" loading="lazy" decoding="async">` : `<span>${esc((p.name || '?').charAt(0).toUpperCase())}</span>`;
+      const thumb = (p) => p.images && p.images[0] ? `<img src="${esc(sfThumb(p.images[0], 160))}" alt="" loading="lazy" decoding="async">` : `<span>${esc((p.name || '?').charAt(0).toUpperCase())}</span>`;
 
       function detail(p) {
         const photos = p.images && p.images.length;

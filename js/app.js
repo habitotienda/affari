@@ -194,13 +194,14 @@ function drawDashboard(el, d) {
     <section class="cols">
       <div class="card"><div class="section-title">Últimos movimientos</div>
         ${d.movements.length ? `<table><thead><tr><th>Concepto</th><th>Tipo</th><th>Medio</th><th class="num">Monto</th></tr></thead><tbody>
-          ${d.movements.map(m => `<tr><td>${esc(m.concept)}</td><td><span class="badge b-${m.kind}">${label[m.kind]}</span></td><td>${esc(m.method)}</td><td class="num">${m.kind === 'salida' ? '−' : ''}${ars(m.amount)}</td></tr>`).join('')}
+          ${d.movements.map((m, ix) => `<tr${tkAttr(m, ix)}><td>${esc(m.concept)}${tkChip(m)}</td><td><span class="badge b-${m.kind}">${label[m.kind]}</span></td><td>${esc(m.method)}</td><td class="num">${m.kind === 'salida' ? '−' : ''}${ars(m.amount)}</td></tr>`).join('')}
         </tbody></table>` : '<div class="empty">Todavía no registraste movimientos. Empezá con tu primera venta.</div>'}
       </div>
       <aside class="card"><div class="section-title">Stock bajo ${icon('alert', 16)}</div>
         ${d.low_stock.length ? `<ul class="alert-list">${d.low_stock.map(p => `<li><div>${esc(p.name)}<small>Mínimo ${p.min_stock}</small></div><span class="stock-n">${p.stock} u.</span></li>`).join('')}</ul>` : '<div class="empty">Todo el stock está en orden.</div>'}
       </aside>
     </section>`;
+  bindTickets(el, d.movements);
   el.querySelectorAll('[data-sale]').forEach(b => b.onclick = () => openSaleModal());
   el.querySelector('[data-fiado]').onclick = () => openFiadoModal();
   el.querySelector('[data-stock]').onclick = () => openStockModal();

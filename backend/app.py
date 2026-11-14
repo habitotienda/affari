@@ -2,7 +2,7 @@ import base64, hashlib, io, json, os, re, threading, time
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, Query
-from fastapi.responses import FileResponse, Response, JSONResponse
+from fastapi.responses import FileResponse, Response, JSONResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -328,12 +328,12 @@ def dashboard(u=Depends(current_user)):
     flow = lambda m: f"SUM(CASE WHEN {day} AND method='{m}' THEN (CASE WHEN kind='entrada' THEN amount WHEN kind='salida' THEN -amount ELSE 0 END) ELSE 0 END)"
     with db.conn() as c:
         # Una sola consulta con todos los números: cada ida y vuelta a Supabase cuesta, así que se juntan
-        k = c.execute(f"""SELECT SUM(CASE WHEN {sale} THEN amount ELSE 0 END), SUM(CASE WHEN {sale} THEN 1 ELSE 0 END),
+        k = c.execute(f"""SELECT SUM(CASE WHEN {sale} THEN amount ELSE 0 END), COUNT(DISTINCT CASE WHEN {sale} THEN COALESCE(ticket, CAST(id AS TEXT)) END),
                                  {flow('Efectivo')}, {flow('Transferencia')}, {flow('Tarjeta')}, SUM(CASE WHEN {sale} THEN amount-cost ELSE 0 END),
                                  (SELECT SUM(balance) FROM clients WHERE store_id=?), (SELECT COUNT(*) FROM clients WHERE store_id=? AND balance>0),
                                  (SELECT SUM(balance) FROM suppliers WHERE store_id=?)
                           FROM sales WHERE store_id=?""", (sid, sid, sid, sid)).fetchone()
-        moves = [dict(r) for r in c.execute("SELECT id,kind,concept,amount,method,created_at FROM sales WHERE store_id=? ORDER BY id DESC LIMIT 8", (sid,))]
+        moves = recent_sales(c, sid, 8)
         low = ops.low_stock(c, sid, 6)
     n = lambda v: v or 0
     return {"kpis": {"sales_today": n(k[0]), "sales_count": int(n(k[1])), "cash": n(k[2]), "transfer": n(k[3]), "card": n(k[4]), "payable": n(k[8]),
@@ -342,12 +342,44 @@ def dashboard(u=Depends(current_user)):
 
 take_product = ops.take_product      # descuenta stock del producto o de su variante
 
+_SALE_COLS = "s.id,s.kind,s.concept,s.amount,s.method,s.is_payment,s.created_at,s.ticket,s.ticket_concept,s.product_name,s.variant_name,s.qty,cl.name AS client_name"
+
+def recent_sales(c, sid, limit):
+    """Últimos movimientos. Los productos vendidos juntos (misma `ticket`) vuelven como UNA sola fila con `items` (el detalle)."""
+    base = f"SELECT {_SALE_COLS} FROM sales s LEFT JOIN clients cl ON cl.id = s.client_id WHERE s.store_id=?"
+    rows = [dict(r) for r in c.execute(base + " ORDER BY s.id DESC LIMIT ?", (sid, limit))]
+    tks = {r["ticket"] for r in rows if r["ticket"]}
+    if tks and rows:                       # si el corte partió una venta por la mitad, se traen las filas que faltan
+        have = {r["id"] for r in rows}
+        extra = c.execute(base + f" AND s.ticket IN ({','.join('?' * len(tks))}) AND s.id < ?", (sid, *tks, min(have)))
+        rows += [dict(r) for r in extra if r["id"] not in have]
+        rows.sort(key=lambda r: -r["id"])
+    out, groups = [], {}
+    for r in rows:
+        r["client_name"] = r.get("client_name") or ""
+        tk = r["ticket"]
+        if not tk:
+            out.append({k: r[k] for k in ("id", "kind", "concept", "amount", "method", "is_payment", "created_at")}); continue
+        item = {"name": r["product_name"] or r["concept"], "variant": r["variant_name"] or "", "qty": r["qty"], "amount": r["amount"]}
+        if tk in groups:
+            g = groups[tk]; g["items"].insert(0, item); g["amount"] = round(g["amount"] + r["amount"], 2); continue
+        g = {"id": r["id"], "kind": r["kind"], "concept": r["concept"], "amount": r["amount"], "method": r["method"], "is_payment": r["is_payment"],
+             "created_at": r["created_at"], "items": [item], "title": r["ticket_concept"] or "", "client": r["client_name"]}
+        groups[tk] = g; out.append(g)
+    for g in out:
+        if "items" not in g: continue
+        n = len(g["items"])
+        if n < 2:                                          # una venta de un solo producto se ve como siempre
+            g.pop("items"); g.pop("title"); g.pop("client"); continue
+        label = g.pop("title") or f"Venta de {n} productos"
+        g["concept"] = f"Fiado: {g['client']} · {label}" if g["kind"] == "fiado" and g["client"] else label
+        g["units"] = sum(i["qty"] for i in g["items"])
+    return out
+
 @app.get("/api/sales")
 def list_sales(limit: int = 100, u=Depends(current_user)):
     with db.conn() as c:
-        rows = c.execute("SELECT id,kind,concept,amount,method,is_payment,created_at FROM sales WHERE store_id=? ORDER BY id DESC LIMIT ?",
-                         (u["store_id"], min(max(limit, 1), 500))).fetchall()
-    return [dict(r) for r in rows]
+        return recent_sales(c, u["store_id"], min(max(limit, 1), 500))
 
 def sale_when(date_str):
     """'AAAA-MM-DD' → 'AAAA-MM-DD 12:00:00' (para ventas/gastos hechos otro día). Vacío → None (se usa la hora actual)."""
@@ -411,12 +443,13 @@ def add_cart_sale(d: CartSaleIn, u=Depends(current_user)):
         for it in d.items:
             p, cost = take_product(c, sid, it.product_id, it.qty, it.variant_id)
             unit = it.price if it.price is not None and it.price >= 0 else p["price"]
-            lines.append({"name": p["label"], "pid": p["id"], "pname": p["name"], "qty": it.qty, "unit": round(unit, 2), "cost": cost, "line": round(unit * it.qty, 2)})
+            lines.append({"name": p["label"], "pid": p["id"], "pname": p["name"], "vname": p.get("variant_name"), "qty": it.qty, "unit": round(unit, 2), "cost": cost, "line": round(unit * it.qty, 2)})
         subtotal = round(sum(l["line"] for l in lines), 2)
         disc = round(min(max(d.discount, 0), subtotal), 2)
         if subtotal - disc <= 0:
             raise HTTPException(400, "El total de la venta debe ser mayor a cero.")
         left, concept = disc, d.concept.strip()[:120]
+        ticket = os.urandom(6).hex() if len(lines) > 1 else None     # une los productos que se vendieron juntos
         first_id = None
         for n, l in enumerate(lines):
             share = left if n == len(lines) - 1 else round(disc * l["line"] / subtotal, 2)
@@ -428,7 +461,9 @@ def add_cart_sale(d: CartSaleIn, u=Depends(current_user)):
             kind, method = ("entrada", d.method) if d.paid else ("fiado", "Fiado")
             if not d.paid:
                 text = f"Fiado: {cl['name']} ({text})"
-            cols, vals = "store_id,client_id,kind,concept,amount,cost,method,product_id,product_name,qty", [sid, cl["id"] if cl else None, kind, text, amount, l["cost"], method, l["pid"], l["pname"], l["qty"]]
+            cols, vals = "store_id,client_id,kind,concept,amount,cost,method,product_id,product_name,qty,variant_name", [sid, cl["id"] if cl else None, kind, text, amount, l["cost"], method, l["pid"], l["pname"], l["qty"], l["vname"]]
+            if ticket:
+                cols += ",ticket,ticket_concept"; vals += [ticket, concept]
             if when:
                 cols += ",created_at"; vals.append(when)
             rid = c.execute(f"INSERT INTO sales({cols}) VALUES ({','.join('?' * len(vals))})", vals).lastrowid
@@ -536,8 +571,14 @@ def resolve_images(c, sid, pid, images):
 def save_meta(c, pid, imgs):
     n, v = db.img_meta(imgs)
     c.execute("UPDATE products SET img_n=?, img_v=? WHERE id=?", (n, v, pid))
-    if n:
-        _warm_later(pid, v)
+
+def _warm_now(pid, imgs):
+    """Con la foto ya guardada, deja listas las miniaturas ANTES de responder: así nadie tiene que esperar (ni fallar) al pedirlas."""
+    try:
+        n, v = db.img_meta(imgs)
+        if n: _gen_thumbs(pid, v)
+    except Exception:
+        _warm_later(pid, db.img_meta(imgs)[1], delay=5)      # si falla ahora, se reintenta en segundo plano
 
 @app.get("/api/products")
 def list_products(u=Depends(current_user)):
@@ -618,39 +659,58 @@ def _warm_store(sid):
     threading.Thread(target=run, daemon=True).start()
 
 _IMG_HEADERS = {"Cache-Control": "public, max-age=31536000, immutable"}
+_IMG_SHORT = {"Cache-Control": "public, max-age=60"}            # respuestas de emergencia: no quedan guardadas para siempre
+_DATA_RE = re.compile(r"^data:(image/[a-z+.-]+);base64,(.+)$", re.S)
 
-@app.get("/api/img/{pid}/{i}")
-def product_image(pid: int, i: int, v: str = "", w: int = 0):
-    """Foto de producto como archivo cacheable (la URL incluye la versión, así que el navegador la baja una sola vez).
-    w=160/320/640 pide una versión reducida, guardada en la base (product_thumbs): no se vuelve a leer ni reescalar la foto original."""
-    key = (pid, i, v, w)
-    if w in _THUMB_W:
-        hit = _THUMBS.get(key)
-        if not hit:
-            def lookup():
-                with db.conn() as c:
-                    return c.execute("SELECT mime, data FROM product_thumbs WHERE product_id=? AND idx=? AND w=? AND v=?", (pid, i, w, v)).fetchone()
-            r = lookup()
-            if not r:
-                if not _gen_thumbs(pid, v):
-                    raise HTTPException(404, "Imagen inexistente.")
-                r = lookup()
-            if not r:
-                raise HTTPException(404, "Imagen inexistente.")
-            hit = (base64.b64decode(r["data"]), r["mime"])
-            if len(_THUMBS) >= _THUMBS_MAX: _THUMBS.pop(next(iter(_THUMBS)), None)
-            _THUMBS[key] = hit
-        return Response(hit[0], media_type=hit[1], headers=_IMG_HEADERS)
+def _current_image(pid, i):
+    """(version vigente, data URL de la foto i) o (None, None) si el producto o la foto ya no existen."""
     with _IMG_SLOTS:
         with db.conn() as c:
             r = c.execute("SELECT images, img_v FROM products WHERE id=?", (pid,)).fetchone()
     imgs = parse_images(r["images"]) if r else []
-    if not r or v != r["img_v"] or not 0 <= i < len(imgs):
+    if not r or not 0 <= i < len(imgs):
+        return None, None
+    return r["img_v"], imgs[i]
+
+@app.get("/api/img/{pid}/{i}")
+def product_image(pid: int, i: int, v: str = "", w: int = 0):
+    """Foto de producto como archivo cacheable. La URL lleva la versión, así que el navegador la baja una sola vez.
+    w=160/320/640 pide una versión reducida (se guarda en product_thumbs al guardar el producto).
+    Regla de oro: si la foto existe, SIEMPRE se responde una imagen: si la versión pedida quedó vieja se redirige a la vigente,
+    y si la miniatura no se pudo preparar se achica al vuelo o se entrega la original."""
+    key = (pid, i, v, w)
+    thumb = w in _THUMB_W
+    hit = _THUMBS.get(key) if thumb else None
+    if hit:
+        return Response(hit[0], media_type=hit[1], headers=_IMG_HEADERS)
+    if thumb:
+        def lookup():
+            with db.conn() as c:
+                return c.execute("SELECT mime, data FROM product_thumbs WHERE product_id=? AND idx=? AND w=? AND v=?", (pid, i, w, v)).fetchone()
+        try:
+            r = lookup()
+            if not r and _gen_thumbs(pid, v):
+                r = lookup()
+        except Exception:
+            r = None
+        if r:
+            hit = (base64.b64decode(r["data"]), r["mime"])
+            if len(_THUMBS) >= _THUMBS_MAX: _THUMBS.pop(next(iter(_THUMBS)), None)
+            _THUMBS[key] = hit
+            return Response(hit[0], media_type=hit[1], headers=_IMG_HEADERS)
+    cur_v, src = _current_image(pid, i)
+    if src is None:
         raise HTTPException(404, "Imagen inexistente.")
-    m = re.match(r"^data:(image/[a-z]+);base64,(.+)$", imgs[i], re.S)
+    if v != cur_v:                                           # la lista del navegador quedó vieja: se lo manda a la versión actual
+        return RedirectResponse(f"/api/img/{pid}/{i}?v={cur_v}" + (f"&w={w}" if thumb else ""), status_code=307, headers={"Cache-Control": "no-store"})
+    m = _DATA_RE.match(src)
     if not m:
         raise HTTPException(404, "Imagen inexistente.")
-    return Response(base64.b64decode(m.group(2)), media_type=m.group(1), headers=_IMG_HEADERS)
+    raw, mime = base64.b64decode(m.group(2)), m.group(1)
+    if thumb:                                                # la miniatura no estaba: se achica al vuelo (o va la original si falla)
+        data, mime2 = _thumb(raw, mime, w)
+        return Response(data, media_type=mime2, headers=_IMG_SHORT)
+    return Response(raw, media_type=mime, headers=_IMG_HEADERS)
 
 @app.post("/api/products")
 def create_product(d: ProductIn, u=Depends(current_user)):
@@ -661,6 +721,7 @@ def create_product(d: ProductIn, u=Depends(current_user)):
         pid = c.execute("INSERT INTO products(store_id,name,description,price,cost,stock,min_stock,active,category,images) VALUES (?,?,?,?,?,?,?,?,?,?)",
                         (u["store_id"], d.name.strip(), d.description.strip(), d.price, d.cost, d.stock, d.min_stock, int(d.active), d.category.strip()[:40], json.dumps(imgs))).lastrowid
         save_meta(c, pid, imgs)
+    _warm_now(pid, imgs)
     return {"id": pid}
 
 @app.put("/api/products/{pid}")
@@ -675,6 +736,7 @@ def update_product(pid: int, d: ProductIn, u=Depends(current_user)):
             ops.sync_variant_stock(c, pid)     # con variantes, el stock total es la suma de ellas
     if not n:
         raise HTTPException(404, "Producto inexistente.")
+    _warm_now(pid, imgs)
     return {"ok": True}
 
 @app.delete("/api/products/{pid}")

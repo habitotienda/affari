@@ -197,3 +197,14 @@ html,body{max-width:100%;overflow-x:clip}
 /* ✕ de cada foto: centrada */
 .gal-it>button[data-rm]{display:grid;place-items:center;padding:0;line-height:0;font-size:16px}
 @media(pointer:coarse){.gal-it>button[data-rm]{font-size:20px}}
+
+/* Venta con varios productos */
+tr.tk-row{cursor:pointer}tr.tk-row:focus-visible{outline:2px solid var(--primary,#5b3fd0);outline-offset:-2px}
+.tk-n{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;background:var(--bg);border:1px solid var(--border);color:var(--muted);white-space:nowrap}
+.tk-head{display:flex;flex-direction:column;gap:2px;margin-bottom:14px}.tk-head strong{font-size:16px}
+.tk-lab{font-weight:700;margin-bottom:8px}
+.tk-list{list-style:none;margin:0;padding:0;border:1.5px solid var(--border);border-radius:12px;overflow:hidden}
+.tk-list li{display:flex;align-items:center;gap:10px;padding:10px 12px}.tk-list li+li{border-top:1px solid var(--border)}
+.tk-q{min-width:38px;font-weight:700;color:var(--muted)}.tk-nm{flex:1;min-width:0;overflow-wrap:anywhere}
+.tk-total{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:17px}
+.tk-hint{margin:6px 0 0;font-size:12px}

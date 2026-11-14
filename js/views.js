@@ -2,6 +2,25 @@
 const fld = (label, inner, id) => `<div class="field"><label${id ? ` for="${id}"` : ''}>${label}</label><div class="input">${inner}</div></div>`;
 const when = s => new Date(String(s).replace(' ', 'T')).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const KIND = { entrada: 'Entrada', salida: 'Salida', fiado: 'Fiado' };
+
+/* Venta con varios productos: en las listas es UNA sola fila (m.items trae el detalle); al tocarla se abre «Esta venta tuvo…» */
+const tkAttr = (m, ix) => m.items ? ` class="tk-row" data-tk="${ix}" tabindex="0" role="button" aria-label="Ver los productos de esta venta"` : '';
+const tkChip = m => m.items ? `<span class="tk-n">${m.items.length} productos ›</span>` : '';
+function bindTickets(el, list) {
+  el.querySelectorAll('[data-tk]').forEach(r => {
+    const open = () => openTicket(list[+r.dataset.tk]);
+    r.onclick = open; r.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+  });
+}
+function openTicket(m) {
+  const items = m.items || [], units = m.units || items.reduce((a, i) => a + i.qty, 0);
+  openModal({ title: 'Detalle de la venta', hideSubmit: true, html: `
+    <div class="tk-head"><strong>${esc(m.concept)}</strong><span class="muted">${when(m.created_at)} · ${esc(m.method)}</span></div>
+    <div class="tk-lab">Esta venta tuvo ${items.length} productos (${units} ${units === 1 ? 'unidad' : 'unidades'})</div>
+    <ul class="tk-list">${items.map(i => `<li><span class="tk-q">${i.qty} ×</span><span class="tk-nm">${esc(i.name)}${i.variant ? ` <small class="muted">· ${esc(i.variant)}</small>` : ''}</span><b>${ars(i.amount)}</b></li>`).join('')}</ul>
+    <div class="tk-total"><span>Total</span><strong>${ars(m.amount)}</strong></div>
+    <p class="muted tk-hint">Los montos ya incluyen el descuento, si lo hubo.</p>` });
+}
 const methodSeg = () => `<div class="field"><label>Medio de pago</label><div class="seg seg3"><label><input type="radio" name="sm" value="Efectivo" checked><span>Efectivo</span></label><label><input type="radio" name="sm" value="Transferencia"><span>Transferencia</span></label><label><input type="radio" name="sm" value="Tarjeta"><span>Tarjeta</span></label></div></div>`;
 const prodOpts = ps => '<option value="">Sin producto (monto libre)</option>' + ps.filter(p => p.active && p.stock > 0).map(p => `<option value="${p.id}" data-price="${p.price}" data-stock="${p.stock}" data-variants="${esc(JSON.stringify((p.variants || []).map(v => ({ id: v.id, name: v.name, price: v.price || p.price, stock: v.stock }))))}">${esc(p.name)} · ${ars(p.price)} · ${p.stock} u.${(p.variants || []).length ? ' · con variantes' : ''}</option>`).join('');
 
@@ -343,7 +362,8 @@ const VIEWS = {
       <div class="card kpi"><span>Efectivo en caja hoy</span><strong>${ars(k.cash)}</strong><small>Entradas menos salidas</small></div>
       <div class="card kpi"><span>Transferencias hoy</span><strong>${ars(k.transfer)}</strong><small>Entradas menos salidas</small></div>
       <div class="card kpi"><span>Tarjeta hoy</span><strong>${ars(k.card)}</strong><small>Débito y crédito</small></div></section>
-      <div class="card tbl-wrap">${list.length ? `<table><thead><tr><th>Fecha</th><th>Concepto</th><th>Tipo</th><th>Medio</th><th class="num">Monto</th></tr></thead><tbody>${list.map(m => `<tr><td class="muted">${when(m.created_at)}</td><td>${esc(m.concept)}</td><td><span class="badge b-${m.kind}">${m.is_payment ? 'Cobro' : KIND[m.kind]}</span></td><td>${esc(m.method)}</td><td class="num ${m.kind === 'salida' ? 'neg' : ''}">${m.kind === 'salida' ? '−' : ''}${ars(m.amount)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Todavía no hay movimientos. Registrá tu primera venta.</div>'}</div>`;
+      <div class="card tbl-wrap">${list.length ? `<table><thead><tr><th>Fecha</th><th>Concepto</th><th>Tipo</th><th>Medio</th><th class="num">Monto</th></tr></thead><tbody>${list.map((m, ix) => `<tr${tkAttr(m, ix)}><td class="muted">${when(m.created_at)}</td><td>${esc(m.concept)}${tkChip(m)}</td><td><span class="badge b-${m.kind}">${m.is_payment ? 'Cobro' : KIND[m.kind]}</span></td><td>${esc(m.method)}</td><td class="num ${m.kind === 'salida' ? 'neg' : ''}">${m.kind === 'salida' ? '−' : ''}${ars(m.amount)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Todavía no hay movimientos. Registrá tu primera venta.</div>'}</div>`;
+    bindTickets(el, list);
     el.querySelector('[data-sale]').onclick = () => openSaleModal(); el.querySelector('[data-exp]').onclick = () => openSaleModal('salida');
   },
   async fiados(el) {
@@ -358,7 +378,7 @@ const VIEWS = {
   async inventario(el) {
     const ps = await api('/products'), low = ps.filter(p => p.stock <= p.min_stock).length;
     el.innerHTML = head('Inventario & Stock', `${ps.length} productos · ${low} con stock bajo`, `<button class="btn ai-pencil-btn" data-aiall title="Generar con IA la descripción de los productos que no tienen">${icon('edit', 16)}<span>Descripciones IA</span></button><button class="btn" data-stock>${icon('box')}Ingresar stock</button><button class="btn btn-primary" data-new>${icon('plus')}Nuevo producto</button>`) + `
-      <div class="card tbl-wrap">${ps.length ? `<table><thead><tr><th>Producto</th><th class="num">Costo</th><th class="num">Precio</th><th>Stock</th><th></th></tr></thead><tbody>${ps.map(p => `<tr><td><div class="inv-prod">${p.images && p.images[0] ? `<img class="prod-th" src="${esc(p.images[0])}" alt="" loading="lazy" decoding="async">` : `<span class="prod-th">${esc((p.name[0] || '?').toUpperCase())}</span>`}<div><strong>${esc(p.name)}</strong>${p.active ? '' : ' <span class="pill-stock pill-off">Inactivo</span>'}</div></div></td><td class="num">${ars(p.cost)}</td><td class="num">${ars(p.price)}</td>
+      <div class="card tbl-wrap">${ps.length ? `<table><thead><tr><th>Producto</th><th class="num">Costo</th><th class="num">Precio</th><th>Stock</th><th></th></tr></thead><tbody>${ps.map(p => `<tr><td><div class="inv-prod">${p.images && p.images[0] ? `<img class="prod-th" src="${esc(sfThumb(p.images[0], 160))}" alt="" loading="lazy" decoding="async">` : `<span class="prod-th">${esc((p.name[0] || '?').toUpperCase())}</span>`}<div><strong>${esc(p.name)}</strong>${p.active ? '' : ' <span class="pill-stock pill-off">Inactivo</span>'}</div></div></td><td class="num">${ars(p.cost)}</td><td class="num">${ars(p.price)}</td>
         <td><span class="pill-stock ${p.stock <= p.min_stock ? 'low' : ''}">${p.stock} u.</span></td><td><div class="act"><button class="btn btn-sm" data-in="${p.id}">+ Stock</button><button class="btn btn-sm" data-edit="${p.id}">Editar</button></div></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Todavía no cargaste productos.</div>'}</div>`;
     el.querySelector('[data-stock]').onclick = () => openStockModal(); el.querySelector('[data-new]').onclick = () => openProductModal();
     el.querySelector('[data-aiall]').onclick = e => fillMissingDescriptions(ps, e.currentTarget);
@@ -404,7 +424,7 @@ const VIEWS = {
             </div>
             <div class="save-row"><span class="hint" data-dirty>${dr.dirty ? 'Cambios sin guardar' : ''}</span><button class="btn" data-discard ${dr.dirty ? '' : 'hidden'}>Descartar</button><button class="btn btn-primary" data-save>Guardar diseño</button></div>
           </div>
-          <div class="pane pane-products"><div class="card">${ps.length ? ps.map(p => `<div class="prod-row"><div>${p.images[0] ? `<img class="prod-th" src="${p.images[0]}" alt="">` : `<span class="prod-th">${esc(p.name[0].toUpperCase())}</span>`}<div style="min-width:0"><strong>${esc(p.name)}</strong> <span class="pill-stock ${p.active ? '' : 'pill-off'}">${p.active ? 'Activo' : 'Inactivo'}</span><p>${ars(p.price)} · ${p.stock} en stock${p.category ? ' · ' + esc(p.category) : ''} · ${p.images.length} foto${p.images.length === 1 ? '' : 's'}</p></div></div>
+          <div class="pane pane-products"><div class="card">${ps.length ? ps.map(p => `<div class="prod-row"><div>${p.images[0] ? `<img class="prod-th" src="${esc(sfThumb(p.images[0], 160))}" alt="">` : `<span class="prod-th">${esc(p.name[0].toUpperCase())}</span>`}<div style="min-width:0"><strong>${esc(p.name)}</strong> <span class="pill-stock ${p.active ? '' : 'pill-off'}">${p.active ? 'Activo' : 'Inactivo'}</span><p>${ars(p.price)} · ${p.stock} en stock${p.category ? ' · ' + esc(p.category) : ''} · ${p.images.length} foto${p.images.length === 1 ? '' : 's'}</p></div></div>
             <div class="act"><button class="btn btn-sm" data-edit="${p.id}">Editar</button><button class="btn btn-sm" data-tog="${p.id}">${p.active ? 'Desactivar' : 'Activar'}</button><button class="btn btn-sm btn-danger" data-del="${p.id}" aria-label="Eliminar">${icon('close', 16)}</button></div></div>`).join('') : '<div class="empty">Creá tu primer producto para armar el catálogo.</div>'}</div></div>
         </div>
         <div class="cb-prev"><div class="prev-bar"><strong>Vista Previa en Vivo</strong><div class="seg"><label><input type="radio" name="vp" value="m" ${state.cbWide ? '' : 'checked'}><span>Móvil</span></label><label><input type="radio" name="vp" value="d" ${state.cbWide ? 'checked' : ''}><span>Escritorio</span></label></div></div>
