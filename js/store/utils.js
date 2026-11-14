@@ -99,6 +99,7 @@ function sfContrast(a, b) {
     }, STALL + n * 4000 + Math.random() * 1500));
   };
   const revive = () => failed.forEach(img => retry(img, 1));
+  window.sfImgRetry = img => { failed.delete(img); retry(img, 1); };    // lo usa sfImageGuard (imageguard.js) para reintentar fotos que agotaron los intentos
   document.addEventListener('error', e => {
     const img = e.target; if (!(img instanceof HTMLImageElement)) return;
     const src = img.dataset.src0 || img.getAttribute('src') || ''; if (!src || src.startsWith('data:') || src.startsWith('blob:')) return;

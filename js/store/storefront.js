@@ -109,6 +109,7 @@ function mountStore(el, init) {
     $('[data-meta]').textContent = items.length ? `${items.length} ${items.length === 1 ? 'producto' : 'productos'}${cat ? ' en ' + cat : ''}` : '';
     $('[data-list]').innerHTML = items.length ? items.map(card).join('') : `<div class="sf-empty">No hay productos para mostrar.${n || term || cat ? '<br><button type="button" class="sf-link" data-reset>Quitar filtros y búsqueda</button>' : ''}</div>`;
     if (lazyIO) lazyIO.disconnect(); lazyIO = sfLazyCards(el.querySelectorAll('[data-list] .sf-card'), embedded ? $('.sf') : null);
+    if (window.sfImageGuard) sfImageGuard.watch(el.querySelectorAll('[data-list] .sf-card'));      // comprueba que todas las fotos principales carguen y trae las que falten
   };
 
   /* Barra flotante + insignia del botón del carrito */
