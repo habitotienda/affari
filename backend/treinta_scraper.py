@@ -159,7 +159,8 @@ def _text(v, limit):
         v = next((x for x in (_text(i, limit) for i in v) if x), "")
     if not isinstance(v, str):
         return ""
-    return re.sub(r"\s+", " ", BeautifulSoup(v, "html.parser").get_text(" ")).strip()[:limit]
+    t = re.sub(r"\s+", " ", BeautifulSoup(v, "html.parser").get_text(" ")).strip()[:limit]
+    return "" if re.fullmatch(r"\$(undefined|null|nan)", t, re.I) else t      # marcadores internos de Next.js ("$undefined"), no son texto
 
 
 def _images(v, base):

@@ -420,6 +420,16 @@ def check_product(d: ProductIn):
 
 IMG_URL = re.compile(r"^/api/img/(\d+)/(\d+)\?v=[0-9a-f]{0,12}$")
 
+_JUNK = re.compile(r"^\$(undefined|null|nan)$", re.I)
+def clean_text(t):
+    """Productos importados antes del arreglo pueden tener «$undefined» como categoría o descripción: no se muestra."""
+    return "" if isinstance(t, str) and _JUNK.match(t.strip()) else t
+
+def clean_product(d):
+    for k in ("category", "description"):
+        if k in d: d[k] = clean_text(d[k])
+    return d
+
 def img_url(pid, i, v):
     return f"/api/img/{pid}/{i}?v={v}"
 
@@ -448,8 +458,8 @@ def save_meta(c, pid, imgs):
 def list_products(u=Depends(current_user)):
     with db.conn() as c:
         rows = c.execute("SELECT id,store_id,name,description,price,cost,stock,min_stock,active,category,img_n,img_v FROM products WHERE store_id=? ORDER BY name COLLATE NOCASE", (u["store_id"],)).fetchall()
-        out = ops.attach_variants(c, [{**{k: v for k, v in dict(r).items() if k not in ("img_n", "img_v")}, "active": bool(r["active"]),
-                                       "images": [img_url(r["id"], i, r["img_v"]) for i in range(r["img_n"])]} for r in rows])
+        out = ops.attach_variants(c, [clean_product({**{k: v for k, v in dict(r).items() if k not in ("img_n", "img_v")}, "active": bool(r["active"]),
+                                       "images": [img_url(r["id"], i, r["img_v"]) for i in range(r["img_n"])]}) for r in rows])
     return out
 
 _THUMBS = {}                      # (pid, i, v, w) -> (bytes, mime); caché chica en memoria para no reescalar la misma foto cada vez
@@ -575,7 +585,7 @@ def public_catalog(slug: str):
         prods = c.execute("SELECT id,name,description,price,stock,category,img_n,img_v FROM products WHERE store_id=? AND active=1 ORDER BY name COLLATE NOCASE", (s["id"],)).fetchall()
     return {"server_now": int(time.time() * 1000),        # hora del servidor: el navegador corrige un reloj mal puesto al calcular «Abierto ahora»
             "store": {"name": s["name"], "type": s["type"], "phone": s["phone"], "logo": s["logo"], "hours": hrs.parse_hours(s["hours"]), "theme": theme_view(parse_theme(s["theme"]), s["id"])},
-            "products": [{**{k: v for k, v in dict(p).items() if k not in ("img_n", "img_v")}, "images": [img_url(p["id"], i, p["img_v"]) for i in range(p["img_n"])]} for p in prods]}
+            "products": [clean_product({**{k: v for k, v in dict(p).items() if k not in ("img_n", "img_v")}, "images": [img_url(p["id"], i, p["img_v"]) for i in range(p["img_n"])]}) for p in prods]}
 
 @app.get("/api/media/{sid}/{key}")
 def store_media(sid: int, key: str, v: str = ""):

@@ -105,7 +105,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700
   .kpis{gap:10px}.kpi{padding:14px}.kpi strong{font-size:20px}.kpi small{font-size:12px}
   .shortcuts{gap:10px}.shortcut{padding:12px}
 }
-@keyframes sheet{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+@keyframes sheet{from{transform:translateY(100%);opacity:1}to{transform:none;opacity:1}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 
 /* ===== Animaciones y microinteracciones ===== */

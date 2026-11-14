@@ -81,9 +81,21 @@ def pool_status(own_keys):
             "own_available": len([k for k in own_keys if not cooling(k)]), "own_total": len(own_keys), "models": MODELS,
             "groq_server_total": len([k for k in sk if provider_of(k) == "groq"]), "groq_models": GROQ_MODELS}
 
+_rr = {"gemini": 0, "groq": 0}
+
+def _rotate(keys, prov):
+    """Reparte la carga: cada pedido empieza por una clave distinta del mismo proveedor (así una clave lenta o sin cuota no frena todos los pedidos)."""
+    if len(keys) < 2:
+        return keys
+    with _lock:
+        n = _rr[prov]; _rr[prov] = n + 1
+    n %= len(keys)
+    return keys[n:] + keys[:n]
+
 def ordered_keys(own_keys):
-    """Claves del servidor primero (en orden) y, solo cuando no queda ninguna disponible, las propias."""
-    out = [k for k in server_keys() if not cooling(k)]
+    """Claves del servidor primero (Gemini y después Groq, rotando dentro de cada proveedor) y, solo cuando no queda ninguna disponible, las propias."""
+    srv = [k for k in server_keys() if not cooling(k)]
+    out = _rotate([k for k in srv if provider_of(k) == "gemini"], "gemini") + _rotate([k for k in srv if provider_of(k) == "groq"], "groq")
     out += [k for k in own_keys if not cooling(k) and k not in out]
     return out
 
@@ -122,13 +134,13 @@ def _classify(status, body):
         return GeminiError("transient", msg, 20, status)
     return GeminiError("fatal", msg, 0, status)
 
-def _request(url, key, payload=None, method="POST"):
+def _request(url, key, payload=None, method="POST", timeout=None):
     data = json.dumps(payload).encode() if payload is not None else None
     headers = {"Content-Type": "application/json", "User-Agent": UA}
     headers.update({"Authorization": f"Bearer {key}"} if provider_of(key) == "groq" else {"x-goog-api-key": key})
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with urllib.request.urlopen(req, timeout=timeout or TIMEOUT) as r:
             return json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         raise _classify(e.code, e.read().decode("utf-8", "replace"))
@@ -231,39 +243,46 @@ def _groq_payload(contents, system, tools, generation):
     return p
 
 # ---------------------------------------------------------------- generación con rotación
-def _gemini_try(key, payload):
-    """Prueba una clave de Gemini con cada modelo. Devuelve la respuesta o lanza GeminiError (el último)."""
+def _gemini_try(key, payload, tmo=None, patient=True):
+    """Prueba una clave de Gemini con cada modelo. Devuelve la respuesta o lanza GeminiError (el último).
+    La cuota es por modelo: si un modelo se quedó sin cuota se prueba el siguiente con la misma clave.
+    patient=False (quedan más claves por probar): ante un error del servidor no se espera ni se repite, se pasa a la próxima clave."""
     global THINK
     last = None
     for model in MODELS:
+        if cooling(f"{key}|{model}"):
+            continue
         for attempt in (1, 2):
             try:
-                return _request(f"{API}/models/{model}:generateContent", key, payload)
+                return _request(f"{API}/models/{model}:generateContent", key, payload, timeout=tmo)
             except GeminiError as e:
                 last = e
                 if e.kind == "fatal" and attempt == 1 and "think" in str(e).lower() and payload["generationConfig"].pop("thinkingConfig", None):
                     THINK = "auto"; continue           # ese modelo no admite apagar el thinking: se reintenta sin pedirlo
-                if e.kind == "transient" and attempt == 1:
+                if e.kind == "transient" and attempt == 1 and patient:
                     time.sleep(1.5); continue
                 break
+        if last.kind == "quota":
+            cool(f"{key}|{model}", last.retry)         # este modelo descansa para esta clave; el otro puede tener cuota
+            continue
         if last.kind == "model":
             continue                                   # ese modelo no existe: se prueba el siguiente con la misma clave
         break
-    raise last
+    raise last or GeminiError("quota", "Todos los modelos de esta clave están en espera.", 65)
 
 def _has_images(payload):
     return any(isinstance(m.get("content"), list) and any(p.get("type") == "image_url" for p in m["content"]) for m in payload.get("messages", []))
 
-def _groq_try(key, payload):
+def _groq_try(key, payload, tmo=None, patient=True):
     """Prueba una clave de Groq. Con fotos usa los modelos de visión; sin fotos, los de texto."""
     last = None
     for model in (GROQ_VISION_MODELS if _has_images(payload) else GROQ_MODELS):
         for attempt in (1, 2):
             try:
-                return _groq_to_gemini(_request(f"{GROQ_API}/chat/completions", key, {**payload, "model": model}))
+                return _groq_to_gemini(_request(f"{GROQ_API}/chat/completions", key, {**payload, "model": model}, timeout=tmo))
             except GeminiError as e:
                 last = e
-                if e.kind == "transient" and attempt == 1:
+                if e.kind == "transient" and attempt == 1 and patient:
                     time.sleep(1.5); continue
                 break
         if last.kind == "model" or (last.kind == "fatal" and "tool_use_failed" in str(last).lower()):
@@ -287,18 +306,20 @@ def generate(contents, system, tools, own_keys=(), generation=None):
     groq = None                                         # se arma solo si hace falta
     last, mine = None, set(server_keys())
     deadline, dead = time.time() + BUDGET, set()        # dead: proveedores cuyo modelo no existe (probar más claves de ese proveedor no sirve)
-    for key in keys:
+    for n, key in enumerate(keys):
         prov = provider_of(key)
         if prov in dead:
             continue
         if time.time() > deadline:
             log.warning("IA: se agotó el tiempo máximo (%ss) probando claves", BUDGET); break
+        tmo = max(10, min(TIMEOUT, int(deadline - time.time())))     # lo que queda del tiempo total: una clave lenta no se come todo
+        more = any(provider_of(k) not in dead for k in keys[n + 1:])
         try:
             if prov == "groq":
                 groq = groq or _groq_payload(contents, system, tools, generation)
-                res = _groq_try(key, groq)
+                res = _groq_try(key, groq, tmo, patient=not more)
             else:
-                res = _gemini_try(key, gem)
+                res = _gemini_try(key, gem, tmo, patient=not more)
             return res, ("server" if key in mine else "own")
         except GeminiError as e:
             last = e
@@ -307,8 +328,10 @@ def generate(contents, system, tools, own_keys=(), generation=None):
                 cool(key, e.retry)                      # esta clave descansa; seguimos con la próxima
             elif e.kind == "model":
                 dead.add(prov)                          # el modelo no existe/está retirado: se salta al otro proveedor
-    if last and last.kind in ("quota", "invalid") or not available_after(own_keys):
+    if not available_after(own_keys):                    # todas descansando por cuota o por ser inválidas
         raise AllKeysExhausted()
+    if time.time() > deadline:                           # quedaban claves, pero se acabó el tiempo: no es falta de cuota
+        raise GeminiError("transient", "La IA tardó demasiado en responder.", 20)
     raise last or AllKeysExhausted()
 
 def available_after(own_keys):

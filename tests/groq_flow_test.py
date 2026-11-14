@@ -61,7 +61,7 @@ from PIL import Image; Image.new("RGB", (10, 10), "red").save(webp, "WEBP")
 img = "data:image/webp;base64," + base64.b64encode(webp.getvalue()).decode()
 reply, acts = ag.converse(u, "sumale 5 al buzo", [img])
 assert reply == "Listo, sumé 5", reply
-assert CALLS == ["GEM_EXHAUSTED_00000000000001"], CALLS                        # Gemini se probó una vez y se enfrió
+assert CALLS and set(CALLS) == {"GEM_EXHAUSTED_00000000000001"} and len(CALLS) <= len(gk.MODELS), CALLS   # Gemini se probó (una vez por modelo) y se enfrió
 assert all(a == "Bearer gsk_SERVER_KEY_000000000000000001" and p == "/v1/chat/completions" for a, p, _ in GROQ)
 first = GROQ[0][2]
 assert first["messages"][0]["role"] == "system" and first["model"] == "vision-a"

@@ -20,13 +20,39 @@ VIEWS.inventario = async function (el) {
   const list = el.querySelector('[data-list]'), pill = x => `<span class="pill-stock ${isLow(x) ? 'low' : ''}">${x.stock} u.</span>`;
   const draw = () => {
     const q = (state.iq || '').toLowerCase(), rows = ps.filter(p => (!state.invLow || prodLow(p)) && (!q || (p.name + ' ' + p.category).toLowerCase().includes(q)));
-    list.innerHTML = rows.length ? `<table><thead><tr><th>Producto</th><th class="num">Costo</th><th class="num">Precio</th><th>Stock</th><th></th></tr></thead><tbody>${rows.map(p => {
+    list.innerHTML = rows.length ? `<p class="tbl-hint">${icon('edit', 14)}Tocá un producto para editarlo, sumar stock o ver sus variantes</p><table><thead><tr><th>Producto</th><th class="num">Costo</th><th class="num">Precio</th><th>Stock</th><th></th></tr></thead><tbody>${rows.map(p => {
       const hv = p.variants.length, low = prodLow(p);
-      return `<tr class="${low ? 'row-low' : ''}"><td><div class="inv-prod">${p.images && p.images[0] ? `<img class="prod-th" src="${esc(p.images[0])}" alt="" loading="lazy" decoding="async">` : `<span class="prod-th">${esc((p.name[0] || '?').toUpperCase())}</span>`}<div><strong>${esc(p.name)}</strong>${p.category ? `<span class="cell-sub">${esc(p.category)}</span>` : ''}${p.active ? '' : ' <span class="pill-stock pill-off">Inactivo</span>'}${hv ? `<span class="var-chip">${p.variants.length} variantes</span>` : ''}${low ? '<span class="low-tag">Stock bajo</span>' : ''}</div></div></td>
+      return `<tr class="row-prod ${low ? 'row-low' : ''}" data-prow="${p.id}"><td><div class="inv-prod">${p.images && p.images[0] ? `<img class="prod-th" src="${esc(p.images[0])}" alt="" loading="lazy" decoding="async">` : `<span class="prod-th">${esc((p.name[0] || '?').toUpperCase())}</span>`}<div><strong>${esc(p.name)}</strong>${p.category ? `<span class="cell-sub">${esc(p.category)}</span>` : ''}${p.active ? '' : ' <span class="pill-stock pill-off">Inactivo</span>'}${hv ? `<span class="var-chip">${p.variants.length} variantes</span>` : ''}${low ? '<span class="low-tag">Stock bajo</span>' : ''}</div></div></td>
         <td class="num">${ars(p.cost)}</td><td class="num">${ars(p.price)}</td><td>${hv ? `<span class="pill-stock ${p.variants.some(isLow) ? 'low' : ''}">${p.stock} u. en total</span>` : pill(p)}</td>
         <td><div class="act">${hv ? '' : `<button class="btn btn-sm" data-in="${p.id}">+ Stock</button>`}<button class="btn btn-sm" data-var="${p.id}">Variantes</button><button class="btn btn-sm" data-edit="${p.id}">Editar</button></div></td></tr>`
-        + p.variants.map(v => `<tr class="row-var ${isLow(v) ? 'row-low' : ''}"><td>↳ ${esc(v.name)}${v.sku ? ` <span class="cell-sub" style="display:inline">· ${esc(v.sku)}</span>` : ''}${isLow(v) ? '<span class="low-tag">Stock bajo</span>' : ''}</td><td class="num">${ars(v.cost || p.cost)}</td><td class="num">${ars(v.price || p.price)}</td><td>${pill(v)} <span class="cell-sub" style="display:inline">mín. ${v.min_stock}</span></td><td><div class="act"><button class="btn btn-sm" data-vin="${v.id}">+ Stock</button></div></td></tr>`).join('');
+        + p.variants.map(v => `<tr class="row-var ${isLow(v) ? 'row-low' : ''}" data-vrow="${v.id}"><td>↳ ${esc(v.name)}${v.sku ? ` <span class="cell-sub" style="display:inline">· ${esc(v.sku)}</span>` : ''}${isLow(v) ? '<span class="low-tag">Stock bajo</span>' : ''}</td><td class="num">${ars(v.cost || p.cost)}</td><td class="num">${ars(v.price || p.price)}</td><td>${pill(v)} <span class="cell-sub" style="display:inline">mín. ${v.min_stock}</span></td><td><div class="act"><button class="btn btn-sm" data-vin="${v.id}">+ Stock</button></div></td></tr>`).join('');
     }).join('')}</tbody></table>` : `<div class="empty">${ps.length ? 'No hay productos con esos filtros.' : 'Todavía no cargaste productos.'}</div>`;
+    /* Celular en vertical: las acciones quedan a la derecha de la tabla, fuera de la vista. Tocar la fila abre un menú con las mismas acciones. */
+    const phone = () => matchMedia('(max-width:700px)').matches;
+    list.onclick = e => {
+      if (!phone() || e.target.closest('button,a,input,select,textarea,label')) return;
+      const vr = e.target.closest('[data-vrow]'), pr = e.target.closest('[data-prow]');
+      if (vr) {
+        const p = ps.find(p => p.variants.some(v => v.id == vr.dataset.vrow)), v = p && p.variants.find(v => v.id == vr.dataset.vrow); if (!v) return;
+        const m = openModal({ title: `${p.name} · ${v.name}`, hideSubmit: true, html: `<div class="act-sheet"><button type="button" class="btn" data-a="vin">${icon('plus', 18)}<span>+ Stock</span><small>Hay ${v.stock} u.</small></button></div>` });
+        m.form.querySelector('[data-a=vin]').onclick = () => { m.close(); openVariantStockModal(p, v); };
+        return;
+      }
+      if (!pr) return;
+      const p = ps.find(p => p.id == pr.dataset.prow); if (!p) return;
+      const hv = p.variants.length, low = prodLow(p);
+      const m = openModal({ title: 'Producto', hideSubmit: true, html: `<div class="act-sheet">
+        <div class="as-head">${p.images && p.images[0] ? `<img class="prod-th" src="${esc(p.images[0])}" alt="">` : `<span class="prod-th">${esc((p.name[0] || '?').toUpperCase())}</span>`}
+          <div><strong>${esc(p.name)}</strong>${p.category ? `<span class="cell-sub">${esc(p.category)}</span>` : ''}${p.active ? '' : '<span class="pill-stock pill-off">Inactivo</span>'}</div></div>
+        <div class="as-stats"><div><small>Costo</small><strong>${ars(p.cost)}</strong></div><div><small>Precio</small><strong>${ars(p.price)}</strong></div>
+          <div class="${low ? 'low' : ''}"><small>${hv ? 'Unidades en total' : 'Unidades'}</small><strong>${p.stock} u.</strong></div></div>
+        ${low ? '<p class="as-low">Stock bajo: conviene reponerlo.</p>' : ''}
+        <div class="as-btns">${hv ? '' : `<button type="button" class="btn btn-primary" data-a="in">${icon('plus', 18)}<span>+ Stock</span></button>`}
+          <button type="button" class="btn" data-a="var">${icon('sliders', 18)}<span>Variantes${hv ? ` (${hv})` : ''}</span></button>
+          <button type="button" class="btn ${hv ? 'btn-primary' : ''}" data-a="edit">${icon('edit', 18)}<span>Editar</span></button></div></div>` });
+      const go = (k, fn) => { m.form.querySelector(`[data-a=${k}]`)?.addEventListener('click', () => { m.close(); fn(); }); };
+      go('edit', () => openProductModal(p)); go('in', () => openStockModal(p.id)); go('var', () => openVariantsModal(p.id));
+    };
     list.querySelectorAll('[data-in]').forEach(b => b.onclick = () => openStockModal(+b.dataset.in));
     list.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openProductModal(ps.find(p => p.id == b.dataset.edit)));
     list.querySelectorAll('[data-var]').forEach(b => b.onclick = () => openVariantsModal(+b.dataset.var));

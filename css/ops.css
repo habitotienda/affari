@@ -79,3 +79,40 @@ tr.void td{color:var(--muted);text-decoration:line-through}tr.void td:last-child
 .inv-prod{display:flex;align-items:center;gap:12px;min-width:0}
 .inv-prod>div{min-width:0}
 .inv-prod .prod-th{width:44px;height:44px;flex:none}
+
+/* Inventario en el celular: tocar un producto abre el menú de acciones */
+.tbl-hint{display:none;align-items:center;gap:6px;margin:0;padding:8px 12px;font-size:12px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);background:var(--bg);position:sticky;left:0}
+.act-sheet{display:grid;gap:10px}
+.act-sheet .btn{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;min-height:52px;padding:0 16px;font-size:15px;font-weight:700;text-align:left}
+.act-sheet .btn small{font-weight:600;font-size:12px;opacity:.7}
+@media(max-width:700px){
+  .tbl-hint{display:flex}
+  tr.row-prod,tr.row-var{cursor:pointer;-webkit-tap-highlight-color:rgba(16,185,129,.15)}
+  tr.row-prod:active,tr.row-var:active{filter:brightness(.97)}
+  tr.row-prod .inv-prod strong::after{content:"›";margin-left:6px;color:var(--muted);font-weight:700}
+}
+
+/* Hoja de acciones del producto (estilo Treinta): datos arriba, botones abajo */
+.act-sheet{gap:14px}
+.as-head{display:flex;align-items:center;gap:12px;min-width:0}
+.as-head .prod-th{width:52px;height:52px;flex:none;object-fit:cover}
+.as-head>div{min-width:0}.as-head strong{display:block;font-size:16px;line-height:1.25;overflow-wrap:anywhere}
+.as-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.as-stats>div{display:grid;gap:2px;padding:10px 8px;text-align:center;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
+.as-stats small{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.as-stats strong{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.as-stats .low{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 8%,var(--bg))}.as-stats .low strong{color:var(--danger)}
+.as-low{margin:-4px 0 0;font-size:12px;font-weight:700;color:var(--danger);text-align:center}
+.as-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.as-btns .btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:68px;padding:8px;font-size:14px;font-weight:700;text-align:center}
+.as-btns .btn:only-child{grid-column:1/-1}
+.as-btns .btn:last-child:nth-child(odd){grid-column:1/-1}
+
+/* Ventanas en el celular: hoja que sube desde abajo. (La regla original quedaba pisada por la de escritorio, que está más abajo en styles.css.) */
+@media(max-width:900px){
+  .modal-overlay{place-items:end center;padding:0}
+  .modal,.modal.wide,.modal.wide:has(.inv-items),.modal.wide:has(.var-row){max-width:100%;width:100%;max-height:92dvh;overflow-y:auto;overscroll-behavior:contain;border-radius:20px 20px 0 0;
+    padding:22px 16px calc(20px + env(safe-area-inset-bottom));animation:sheet .26s cubic-bezier(.2,.8,.2,1) both;position:relative}
+  .modal::before{content:"";position:absolute;top:8px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:4px;background:var(--border)}
+  .modal-head{margin-top:6px}
+}

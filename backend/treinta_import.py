@@ -6,7 +6,7 @@
 Registro (igual que ai_agent):  app.include_router(treinta_import.make_router(current_user))
 El precio de costo se guarda en 0: es un dato privado que no figura en la tienda pública.
 """
-import json, logging
+import re, json, logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
@@ -41,6 +41,10 @@ class SaveIn(BaseModel):
     products: List[ItemIn]
 
 
+def _clean(t):
+    """Los marcadores internos de Next.js ("$undefined", "$null"…) que se colaron al importar no son texto del producto."""
+    return "" if re.fullmatch(r"\$(undefined|null|nan)", (t or "").strip(), re.I) else t
+
 def _fail(e: ScrapeError):
     raise HTTPException(e.status, e.message)
 
@@ -52,8 +56,8 @@ def _clean(it: ItemIn):
     if not name or price is None:
         return None
     urls = [u for u in ([it.image] if it.image else []) + it.images if isinstance(u, str) and u.startswith(("http://", "https://"))]
-    return {"name": name, "price": price, "description": " ".join(it.description.split())[:DESC_MAX],
-            "category": " ".join(it.category.split())[:CAT_MAX], "stock": max(0, min(int(it.stock), 10_000_000)),
+    return {"name": name, "price": price, "description": _clean(" ".join(it.description.split())[:DESC_MAX]),
+            "category": _clean(" ".join(it.category.split())[:CAT_MAX]), "stock": max(0, min(int(it.stock), 10_000_000)),
             "urls": list(dict.fromkeys(urls))[:MAX_IMGS_PER_PRODUCT]}
 
 

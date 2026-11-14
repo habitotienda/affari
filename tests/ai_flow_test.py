@@ -59,7 +59,8 @@ SCRIPT += [fc("create_product", {"name": "Remera negra", "stock": 20, "price": 1
 reply, acts = ag.converse(u, "cargá 20 remeras negras a 15000 y sumale 10 al buzo", [img])
 print("reply:", reply, "|", [a["text"] for a in acts])
 assert reply == "Listo" and len(acts) == 2 and all(a["ok"] for a in acts)
-assert CALLS[0][0] == "KEY_DAILY_EXHAUSTED_000001" and all(k == "KEY_OK_SECOND_00000000002" for k, _, _ in CALLS[1:]), [k for k, _, _ in CALLS]
+ks = [k for k, _, _ in CALLS]          # la agotada, si le toca primero, se prueba con cada modelo y se enfría; el resto se reparte entre las otras
+assert ks.count("KEY_DAILY_EXHAUSTED_000001") <= len(gk.MODELS) and "KEY_DAILY_EXHAUSTED_000001" not in ks[len(gk.MODELS):], ks
 with db.conn() as c:
     p = c.execute("SELECT * FROM products WHERE name='Remera negra'").fetchone()
     assert p["stock"] == 20 and p["price"] == 15000 and p["active"] == 1 and json.loads(p["images"]) == [img] and p["description"]
@@ -99,8 +100,8 @@ print("4 OK  (variantes, resumen, deudores, stock bajo)")
 
 # 5) 429 por minuto en la clave 2 -> pasa a la 3
 n = len(CALLS); SCRIPT += ["quota", txt("desde la 3ra")]
-r, _ = ag.converse(u, "q", []); assert r == "desde la 3ra" and CALLS[-1][0] == "KEY_THIRD_0000000000000003", CALLS[-1][0]
-print("5 OK  (rotación por 429 por minuto)")
+r, _ = ag.converse(u, "q", []); assert r == "desde la 3ra" and CALLS[-1][0] != "KEY_DAILY_EXHAUSTED_000001", CALLS[-1][0]   # sigue con otro modelo de la misma clave o con otra clave
+print("5 OK  (429 por minuto: otro modelo u otra clave)")
 
 # 6) todas agotadas -> AllKeysExhausted; con clave propia -> sigue andando
 for k in gk.server_keys(): gk.cool(k, 600)
