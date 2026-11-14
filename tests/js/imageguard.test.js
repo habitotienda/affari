@@ -65,7 +65,8 @@ new Function(src)();
   // orden: la más cercana a la pantalla primero
   assert(requested.length && !/dead/.test(requested[0]), 'arranca por las cercanas');
   // desde la 2.ª ronda se pide la original sin w=
-  assert(requested.some(u => u.includes('dead') && !/w=\d+/.test(u)), 'cae a la foto original');
+  assert(requested.some(u => u.includes('dead') && /w=320/.test(u)), 'cae a una miniatura más chica');
+  assert(requested.every(u => /w=\d+/.test(u)), 'nunca pide la foto completa desde la grilla');
   assert(events.length > 1 && events[events.length - 1].done, 'emite eventos de estado');
   g.stop();
   console.log('imageguard.test.js OK  (pedidos:', requested.length, ', máx. simultáneas:', maxInflight + ')');

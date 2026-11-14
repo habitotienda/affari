@@ -51,7 +51,7 @@ function mountStore(el, init) {
   const stepHTML = p => p.stock <= 0 ? '' : cart.qty(p.id) ? stepper(p, cart.qty(p.id)) : `<button type="button" class="sf-add" data-act="inc" data-id="${p.id}">${SF_ICON.cart}${sfEsc(theme().addLabel || 'Agregar')}</button>`;
   const card = p => {
     const out = p.stock <= 0;
-    return `<article class="sf-card${out ? ' out' : ''}"><div class="sf-gal">${sfGallery(p)}
+    return `<article class="sf-card${out ? ' out' : ''}"><div class="sf-gal">${sfGallery(p, sfGridW(viewMode() === '1'))}
       ${out ? '<span class="sf-flag out">Agotado</span>' : p.stock <= 3 ? '<span class="sf-flag">Últimas unidades</span>' : ''}</div>
       <div class="sf-info"><h3>${sfEsc(p.name)}</h3>${p.description ? `<p>${sfEsc(p.description)}</p><button type="button" class="sf-more" data-more="${p.id}" hidden>Ver más</button>` : ''}
       <div class="sf-row"><span class="sf-price">${sfArs(p.price)}</span>${out ? '' : `<span class="sf-stock">Stock ${p.stock}</span>`}</div><div data-step="${p.id}">${stepHTML(p)}</div></div></article>`;
@@ -205,13 +205,16 @@ function mountStore(el, init) {
     layer.insertAdjacentHTML('beforeend', `<div class="sf-scrim" data-close-detail></div>
       <section class="sf-detail" role="dialog" aria-modal="true" aria-label="${sfEsc(p.name)}">
         <header class="sf-dth"><h2>${sfEsc(p.name)}</h2><button type="button" class="sf-x" data-close-detail aria-label="Cerrar">${SF_ICON.close}</button></header>
-        <div class="sf-dbody">${img ? `<img class="sf-dimg" src="${sfEsc(sfThumb(img, 640))}" alt="${sfEsc(p.name)}" data-dz="0">` : ''}
+        <div class="sf-dbody">${img ? `<img class="sf-dimg" src="${sfEsc(sfThumb(img, 640))}" data-full="${sfEsc(sfFull(img))}" alt="${sfEsc(p.name)}" data-dz="0">` : ''}
           ${rest.length ? `<div class="sf-dmore">${rest.map((s, k) => `<img src="${sfEsc(sfThumb(s, 640))}" alt="${sfEsc(p.name)} (foto ${k + 2} de ${rest.length + 1})" decoding="async" data-dz="${k + 1}">`).join('')}</div>` : ''}
           <div class="sf-row"><span class="sf-price">${sfArs(p.price)}</span>${out ? '<span class="sf-stock">Agotado</span>' : `<span class="sf-stock">Stock ${p.stock}</span>`}</div>
           <p class="sf-dtext">${sfEsc(p.description || '')}</p></div>
         <footer class="sf-dfoot"><div data-step="${p.id}">${stepHTML(p)}</div></footer></section>`);
     if (!embedded) { document.body.style.overflow = 'hidden'; try { history.pushState({ sfd: 1 }, ''); } catch { detail.pushed = false; } }
     layer.querySelector('.sf-detail .sf-x').focus();
+    /* Foto completa: solo ahora que el visitante abrió el producto. Se ve primero la miniatura (ya en caché) y se cambia cuando la grande terminó de bajar. */
+    const main = layer.querySelector('.sf-detail .sf-dimg[data-full]');
+    if (main) { const big = new Image(); big.onload = () => { if (main.isConnected) main.src = big.src; }; big.src = main.dataset.full; }
   };
   const closeDetail = fromPop => {
     if (!detail) return; const d = detail; detail = null;
@@ -262,7 +265,7 @@ function mountStore(el, init) {
   el.addEventListener('click', e => {
     const T = e.target, a = T.closest('[data-act]'), rm = T.closest('[data-rm]'), ch = T.closest('[data-chip]');
     const vm = T.closest('[data-vmode]');
-    if (vm) { vsaved = vm.dataset.vmode; try { VKEY && localStorage.setItem(VKEY, vsaved); } catch {} applyView(); return requestAnimationFrame(markMore); }
+    if (vm) { vsaved = vm.dataset.vmode; try { VKEY && localStorage.setItem(VKEY, vsaved); } catch {} applyView(); sfRewidth(el, sfGridW(vsaved === '1')); return requestAnimationFrame(markMore); }
     const nm = T.closest('[data-list] .sf-info h3'); if (nm) { const pid = nm.closest('.sf-card').querySelector('[data-step]').dataset.step; return openDetail(byId(+pid)); }   // tocar el nombre abre el producto
     const mo = T.closest('[data-more]'); if (mo) return openDetail(byId(+mo.dataset.more));
     if (T.closest('[data-close-detail]')) return closeDetail();

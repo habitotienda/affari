@@ -6,10 +6,10 @@
    Las lejanas esperan: no se baja nada que el visitante todavía no esté por ver. Al hacer scroll se vuelve a revisar.
    · sin iniciar  -> la descarga (si el lazy-load no llegó), las más cercanas primero y pocas a la vez;
    · sin src      -> la repone con la URL que tenía;
-   · rota         -> (sf-broken, o terminó de cargar sin ancho) la reintenta hasta 3 rondas y, desde la 2.ª, pide la foto original en vez de la miniatura;
+   · rota         -> (sf-broken, o terminó de cargar sin ancho) la reintenta hasta 3 rondas y, desde la 2.ª, pide una miniatura más chica (640→320→160). Nunca la foto completa: esa solo se baja al abrir el producto;
    · en reintento -> no la toca: de esas se encarga utils.js (así no se duplican pedidos).
    Si una foto falla varias veces, o tarda más de 10 s, se le dibuja encima un botón de flecha circular (↻): al tocarlo se vuelve a pedir
-   (la 2.ª vez pide la foto original en vez de la miniatura) y gira mientras carga. Desaparece solo cuando la foto aparece.
+   (la 2.ª vez con una miniatura más chica) y gira mientras carga. Desaparece solo cuando la foto aparece.
    Se rearma sola al volver la conexión o la pestaña. Se detiene cuando todas están cargadas o ya no hay nada más por intentar.
    API: sfImageGuard.watch(cards)  ·  .status() -> { total, ok, loading, pending, broken, failed, done }  ·  .stop()
    Evento: document 'sf:images' con detail = status() cada vez que cambia el recuento. */
@@ -71,7 +71,7 @@
     if (st === 'pending') { img.src = img.dataset.first; img.removeAttribute('data-first'); return; }
     let u = want.get(img) || img.dataset.src0 || img.getAttribute('src') || '';
     if (!u) return;
-    if (n >= 2) u = u.replace(/([?&])w=\d+&?/, '$1').replace(/[?&]$/, '');   // la miniatura no sale: se pide la foto original
+    if (n >= 2) u = u.replace(/w=(\d+)/, (m, w) => 'w=' + (+w > 320 ? 320 : 160));   // la miniatura no sale: se prueba otra más chica (otra URL, otro archivo en el servidor); nunca la foto completa
     img.dataset.src0 = u;
     if (st === 'lost') { img.src = u; return; }
     if (typeof window.sfImgRetry === 'function') window.sfImgRetry(img);   // utils.js: salta cachés rotas y vuelve a vigilarla

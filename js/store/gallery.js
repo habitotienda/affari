@@ -1,14 +1,26 @@
 /* Catálogo · galería de producto (hasta 5 fotos): slider con scroll-snap, flechas y miniaturas */
 const SF_MAX_IMG = 5;
 
-function sfGallery(p) {
+/* Ancho de las miniaturas de la grilla (el servidor solo ofrece 160/320/640): 320 px alcanza en celular de pantalla normal con 2 columnas;
+   640 px en compu, en pantallas retina (DPR > 2) y en la vista de 1 columna. La foto COMPLETA nunca se pide desde la grilla. */
+const sfGridW = (oneCol) => (!oneCol && innerWidth < 700 && (window.devicePixelRatio || 1) <= 2) ? 320 : 640;
+/* Foto completa (la que se guardó): la misma URL sin el ancho. Solo se usa al abrir el detalle o el visor. */
+const sfFull = u => /^\/api\/img\//.test(u || '') ? u.replace(/([?&])(w|_r|_g)=\d+&?/g, '$1').replace(/[?&]$/, '') : u;
+/* Cambia el ancho de las miniaturas ya dibujadas (p. ej. al pasar a la vista de 1 columna) sin volver a dibujar la lista ni perder la tanda */
+function sfRewidth(root, w) {
+  root.querySelectorAll('.sf-slides img').forEach(im => ['src', 'data-first', 'data-src'].forEach(a => {
+    const v = im.getAttribute(a); if (v && /^\/api\/img\/.*[?&]w=\d+/.test(v) && !v.includes('w=' + w)) { im.setAttribute(a, v.replace(/w=\d+/, 'w=' + w)); if (a === 'src') im.dataset.src0 = im.getAttribute('src'); }
+  }));
+}
+
+function sfGallery(p, w = 640) {
   const imgs = (p.images || []).slice(0, SF_MAX_IMG);
   if (!imgs.length) return `<div class="sf-noimg">${sfEsc((p.name[0] || '?').toUpperCase())}</div>`;
   const many = imgs.length > 1;
   /* Solo la primera foto se descarga al dibujar la tarjeta. Las demás (y las miniaturas) esperan a que el visitante toque
      o pase el mouse por la galería (sfHydrate). Con 150 productos × 5 fotos, bajarlas todas llenaba la memoria del celular y lo congelaba. */
   return `<div class="sf-slides" data-zoom="${p.id}" tabindex="0" role="group" aria-label="Fotos de ${sfEsc(p.name)}">${imgs.map((s, i) =>
-      `<img ${i ? 'data-src' : 'data-first'}="${sfEsc(sfThumb(s, 640))}" alt="${sfEsc(p.name)} (foto ${i + 1} de ${imgs.length})" decoding="async">`).join('')}</div>`
+      `<img ${i ? 'data-src' : 'data-first'}="${sfEsc(sfThumb(s, w))}" alt="${sfEsc(p.name)} (foto ${i + 1} de ${imgs.length})" decoding="async">`).join('')}</div>`
     + (many ? `<button type="button" class="sf-arrow l" data-slide="-1" aria-label="Foto anterior">${SF_ICON.prev}</button><button type="button" class="sf-arrow r" data-slide="1" aria-label="Foto siguiente">${SF_ICON.next}</button>
       <div class="sf-thumbs">${imgs.map((s, i) => `<button type="button" data-th="${i}" class="${i ? '' : 'on'}" aria-label="Ver foto ${i + 1}"><img data-src="${sfEsc(sfThumb(s, 160))}" alt="" decoding="async"></button>`).join('')}</div>` : '');
 }
