@@ -1,4 +1,5 @@
 import base64, hashlib, io, json, os, re, threading, time
+from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, Query
 from fastapi.responses import FileResponse, Response, JSONResponse
@@ -162,7 +163,7 @@ class CartItemIn(BaseModel):
 class CartSaleIn(BaseModel):
     items: list[CartItemIn]; method: str = "Efectivo"; paid: bool = True
     discount: float = 0; client_id: Optional[int] = None; client_name: str = ""; client_phone: str = ""
-    concept: str = ""; note: str = ""
+    concept: str = ""; note: str = ""; date: str = ""      # date: AAAA-MM-DD, solo si la venta se hizo otro día (vacío = ahora)
 
 class FiadoIn(BaseModel):
     client_id: Optional[int] = None; name: str = ""; phone: str = ""
@@ -373,6 +374,17 @@ def add_cart_sale(d: CartSaleIn, u=Depends(current_user)):
     if d.method not in METHODS:
         raise HTTPException(400, "Medio de pago inválido.")
     sid, phone = u["store_id"], re.sub(r"\D", "", d.client_phone or "")
+    when = None
+    if d.date:
+        try:
+            day = datetime.strptime(d.date.strip(), "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(400, "La fecha de la venta no es válida.")
+        if day.date() > (datetime.now() + timedelta(days=1)).date():     # +1 día de margen por la diferencia horaria con el celular
+            raise HTTPException(400, "La fecha de la venta no puede ser futura.")
+        if day.year < 2000:
+            raise HTTPException(400, "La fecha de la venta no es válida.")
+        when = day.strftime("%Y-%m-%d") + " 12:00:00"
     with db.conn() as c:
         cl = c.execute("SELECT * FROM clients WHERE id=? AND store_id=?", (d.client_id, sid)).fetchone() if d.client_id else None
         name = d.client_name.strip()[:100]
@@ -404,8 +416,10 @@ def add_cart_sale(d: CartSaleIn, u=Depends(current_user)):
             kind, method = ("entrada", d.method) if d.paid else ("fiado", "Fiado")
             if not d.paid:
                 text = f"Fiado: {cl['name']} ({text})"
-            rid = c.execute("INSERT INTO sales(store_id,client_id,kind,concept,amount,cost,method,product_id,product_name,qty) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                            (sid, cl["id"] if cl else None, kind, text, amount, l["cost"], method, l["pid"], l["pname"], l["qty"])).lastrowid
+            cols, vals = "store_id,client_id,kind,concept,amount,cost,method,product_id,product_name,qty", [sid, cl["id"] if cl else None, kind, text, amount, l["cost"], method, l["pid"], l["pname"], l["qty"]]
+            if when:
+                cols += ",created_at"; vals.append(when)
+            rid = c.execute(f"INSERT INTO sales({cols}) VALUES ({','.join('?' * len(vals))})", vals).lastrowid
             first_id = first_id or rid
         if not d.paid:
             c.execute("UPDATE clients SET balance = balance + ? WHERE id=?", (subtotal - disc, cl["id"]))

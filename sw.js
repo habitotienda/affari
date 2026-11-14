@@ -3,7 +3,7 @@
    - /api/*: siempre a la red (nunca se cachean datos de negocio ni sesiones).
    - Sin conexión: se abre la app y se muestra la pantalla de reintento.
    Al publicar cambios, subí el número de VERSION para que todos reciban la versión nueva. */
-const VERSION = 'v21';
+const VERSION = 'v22';
 const CACHE = `affari-${VERSION}`;
 const PRECACHE = [
   '/',
@@ -46,6 +46,7 @@ const PRECACHE = [
   '/js/studio-history.js',
   '/js/studio-products.js',
   '/js/studio-export.js',
+  '/js/back.js',
   '/js/billing.js',
   '/js/app.js',
   '/assets/icons/logo.svg',

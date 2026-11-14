@@ -42,3 +42,10 @@ textarea.sv-in{resize:vertical}
 .sv-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.sv-acts .btn{justify-content:center}
 @media(max-width:700px){.sv{place-items:end center}.sv-box{height:100dvh;max-width:100%;border-radius:0;animation:sheet .26s both}}
 .sv-nm{flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.25}.sv-item.col .sv-r>.sv-th{width:48px;height:48px}
+/* Ganancia estimada */
+.sv-prof{margin:12px 0 0;background:#ECFDF5;border:1.5px solid #A7F3D0;border-radius:12px;padding:10px 14px;display:grid;gap:2px}
+.sv-prof strong{font-size:22px;font-weight:800;color:#047857}.sv-prof.neg{background:#FFF1F2;border-color:#FECDD3}.sv-prof.neg strong{color:#BE123C}
+.sv-prof-r{display:flex;justify-content:space-between;align-items:center;font-weight:700;color:#065F46}.sv-prof.neg .sv-prof-r{color:#9F1239}
+.sv-pct{font-size:13px;font-weight:700;opacity:.8}.sv-prof small{margin-top:4px}
+.sv-eye{border:0;background:none;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
+.sv-imp .btn{flex:1;justify-content:center}

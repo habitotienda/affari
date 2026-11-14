@@ -86,11 +86,14 @@ function toast(msg) {
   document.body.appendChild(t); setTimeout(() => t.remove(), 2400);
 }
 
-function logout() { if (state.stop) state.stop(); setDrawer(false); Session.clear(); state.user = null; state.draft = null; try { history.replaceState(null, '', location.pathname); } catch {} boot(); }
+function logout() { if (state.stop) state.stop(); Back.drop(state.drawerH); state.drawerH = null; setDrawer(false); Session.clear(); state.user = null; state.draft = null; try { history.replaceState(null, '', location.pathname); } catch {} boot(); }
 
 /* Menú lateral en celular (botón de tres rayas): se abre como cajón sobre el contenido */
 function setDrawer(open) {
-  state.drawer = !!open;
+  open = !!open;
+  if (open && !state.drawer) state.drawerH = Back.open({ onBack: () => { setDrawer(false); } });   // «atrás» cierra el cajón
+  if (!open && state.drawerH) { Back.release(state.drawerH); state.drawerH = null; }
+  state.drawer = open;
   const app = root.querySelector('.app'); if (!app) return;
   app.classList.toggle('drawer-open', state.drawer);
   document.body.classList.toggle('no-scroll', state.drawer);
@@ -138,7 +141,9 @@ function renderShell() {
   side.addEventListener('touchend', e => { if (x0 !== null && e.changedTouches[0].clientX - x0 < -60) setDrawer(false); x0 = null; }, { passive: true });
 }
 function go(view, fromRoute) {
-  if (!fromRoute && location.hash !== routeOf(view)) { try { history.pushState(null, '', routeOf(view)); } catch {} }
+  /* Con el cajón abierto su entrada del historial se REEMPLAZA por la de la sección (así «atrás» no vuelve a un cajón fantasma) */
+  const dh = Back.has(state.drawerH);
+  if (!fromRoute && location.hash !== routeOf(view)) { try { dh ? history.replaceState(null, '', routeOf(view)) : history.pushState(null, '', routeOf(view)); } catch {} if (dh) { Back.drop(state.drawerH); state.drawerH = null; } }
   if (state.stop) state.stop();          // corta la actualización en vivo de la vista anterior
   state.view = view;
   root.querySelectorAll('[data-view]').forEach(b => {

@@ -12,14 +12,19 @@
     try { [products, clients] = await Promise.all([api('/products'), api('/clients')]); } catch (e) { return toast(e.message); }
     const rows = [];
     products.filter(p => p.active && p.stock > 0).forEach(p => {
-      if (p.variants && p.variants.length) p.variants.filter(v => v.stock > 0).forEach(v => rows.push({ key: `${p.id}:${v.id}`, pid: p.id, vid: v.id, name: `${p.name} · ${v.name}`, price: v.price || p.price, stock: v.stock, img: p.images && p.images[0] }));
-      else rows.push({ key: `${p.id}:0`, pid: p.id, vid: null, name: p.name, price: p.price, stock: p.stock, img: p.images && p.images[0] });
+      if (p.variants && p.variants.length) p.variants.filter(v => v.stock > 0).forEach(v => rows.push({ key: `${p.id}:${v.id}`, pid: p.id, vid: v.id, name: `${p.name} · ${v.name}`, price: v.price || p.price, cost: v.cost || p.cost || 0, stock: v.stock, img: p.images && p.images[0] }));
+      else rows.push({ key: `${p.id}:0`, pid: p.id, vid: null, name: p.name, price: p.price, cost: p.cost || 0, stock: p.stock, img: p.images && p.images[0] });
     });
-    const S = { step: 1, q: '', cart: new Map(), paid: true, method: 'Efectivo', dtype: '%', dval: 0, client: null, concept: '', note: '', receipt: null, busy: false };
+    const todayStr = () => { const d = new Date(), z = k => String(k).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
+    let showProfit = true; try { showProfit = localStorage.getItem('affari:showProfit') !== '0'; } catch {}
+    const S = { step: 1, date: todayStr(), q: '', cart: new Map(), paid: true, method: 'Efectivo', dtype: '%', dval: 0, client: null, concept: '', note: '', receipt: null, busy: false };
     const thumb = x => `<div class="sv-th">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : esc((x.name[0] || '?').toUpperCase())}</div>`;
     const sub = () => [...S.cart.values()].reduce((a, i) => a + i.qty * i.price, 0);
     const disc = () => n2(Math.min(sub(), S.dtype === '%' ? sub() * Math.min(S.dval, 100) / 100 : S.dval));
     const total = () => n2(sub() - disc());
+    const costOf = () => [...S.cart.values()].reduce((a, i) => a + i.qty * (Number(i.cost) || 0), 0);
+    const profit = () => n2(total() - costOf());
+    const noCost = () => [...S.cart.values()].filter(i => !(Number(i.cost) > 0)).length;
     const units = () => [...S.cart.values()].reduce((a, i) => a + i.qty, 0);
 
     const ov = document.createElement('div'); ov.className = 'sv';
@@ -29,7 +34,12 @@
     const $ = s => ov.querySelector(s), body = $('[data-body]');
     const onKey = e => { if (e.key === 'Escape' && !ov.querySelector('.sv-sheet')) close(); };
     document.addEventListener('keydown', onKey);
-    const close = () => { document.removeEventListener('keydown', onKey); ov.remove(); if (S.receipt) refresh(); };
+    /* «Atrás» del celular: cierra la hoja de cliente, vuelve un paso, o cierra la venta (en el comprobante ya no se vuelve al pago) */
+    const bh = Back.open({ onBack: () => {
+      const sh = ov.querySelector('.sv-sheet'); if (sh) { sh.remove(); return true; }
+      if (S.step > 1 && S.step < 4) { S.step--; render(); return true; }
+      close(); } });
+    const close = () => { document.removeEventListener('keydown', onKey); Back.release(bh); ov.remove(); if (S.receipt) refresh(); };
     $('[data-x]').onclick = close;
     $('[data-back]').onclick = () => { if (S.step > 1 && S.step < 4) { S.step--; render(); } else close(); };
 
@@ -67,7 +77,7 @@
           <div class="sv-r"><div class="sv-stp"><button type="button" data-m="${i.key}" aria-label="Quitar uno">−</button><b>${i.qty}</b><button type="button" data-p="${i.key}" aria-label="Agregar uno">+</button></div>
           <label class="sv-price">$<input class="sv-in" type="number" min="0" step="any" inputmode="decimal" value="${i.price}" data-pr="${i.key}" aria-label="Precio unitario"></label></div>
           <small class="muted">${i.qty} × ${ars(i.price)} = <b data-line="${i.key}">${ars(i.qty * i.price)}</b></small></div>`).join('')
-          + `<button type="button" class="btn btn-block" data-more>${icon('plus')}Agregar más productos</button><p class="muted sv-hint">Al crear la venta se descuentan las unidades de tu inventario.</p>`;
+          + `<button type="button" class="btn btn-block" data-more>${icon('plus')}Agregar más productos</button><div data-prof></div><p class="muted sv-hint">Al crear la venta se descuentan las unidades de tu inventario.</p>`;
         body.onclick = e => { const b = e.target.closest('button'); if (!b) return;
           if (b.dataset.p) setQty(b.dataset.p, 1); if (b.dataset.m) setQty(b.dataset.m, -1);
           if (b.dataset.rm) { S.cart.delete(b.dataset.rm); S.cart.size ? render() : (S.step = 1, render()); }
@@ -81,9 +91,10 @@
           <div class="sv-lab">Descuento</div><div class="sv-r"><div class="sv-seg sm"><button type="button" class="${S.dtype === '%' ? 'on' : ''}" data-dt="%">%</button><button type="button" class="${S.dtype === '$' ? 'on' : ''}" data-dt="$">$</button></div>
           <input class="sv-in" type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="${S.dval || ''}" data-dv aria-label="Descuento"></div>
           <div class="sv-lab">Cliente${S.paid ? ' (opcional)' : ''}</div><button type="button" class="sv-pick" data-cl>${cl ? `<strong>${esc(cl.name)}</strong>${cl.phone ? ` <span class="muted">· ${esc(cl.phone)}</span>` : ''}` : '<span class="muted">Elegir o agregar cliente</span>'}<span>▾</span></button>
+          <div class="sv-lab">Fecha de la venta</div><input class="sv-in" type="date" data-date max="${todayStr()}" value="${S.date}" aria-label="Fecha de la venta">
           <div class="sv-lab">Concepto</div><input class="sv-in" data-cc maxlength="120" placeholder="Dale un nombre a tu venta" value="${esc(S.concept)}">
           <div class="sv-lab">Nota en el comprobante</div><textarea class="sv-in" rows="3" data-nt maxlength="300" placeholder="Agregar nota…">${esc(S.note)}</textarea>
-          <div class="sv-sum" data-sum></div>`;
+          <div class="sv-sum" data-sum></div><div data-prof></div>`;
         sum();
         body.onclick = e => { const b = e.target.closest('button'); if (!b) return;
           if (b.dataset.paid) { S.paid = b.dataset.paid === '1'; render(); }
@@ -92,15 +103,24 @@
           if (b.hasAttribute('data-cl')) pickClient(); };
         body.oninput = e => { const t = e.target;
           if (t.matches('[data-dv]')) { S.dval = Math.max(0, Number(t.value) || 0); sum(); foot(); }
+          if (t.matches('[data-date]')) S.date = t.value && t.value <= todayStr() ? t.value : todayStr();
           if (t.matches('[data-cc]')) S.concept = t.value; if (t.matches('[data-nt]')) S.note = t.value; };
       }
       if (S.step === 4) drawReceipt();
       foot();
     }
+    function paintProfit() {
+      const p = profit(), t = total(), pct = t > 0 ? Math.round(p / t * 100) : 0, nc = noCost();
+      ov.querySelectorAll('[data-prof]').forEach(e => { e.className = 'sv-prof' + (p < 0 ? ' neg' : '');
+        e.innerHTML = `<div class="sv-prof-r"><span>Ganancia estimada</span><button type="button" class="sv-eye" data-eye aria-label="${showProfit ? 'Ocultar' : 'Mostrar'} ganancia" aria-pressed="${showProfit}">${showProfit ? '🙈' : '👁'}</button></div>
+          <strong>${showProfit ? ars(p) : '$ ••••'}</strong>${showProfit ? `<span class="sv-pct">${pct}% del total</span>` : ''}
+          ${nc ? `<small class="muted">${nc === 1 ? '1 producto sin costo cargado' : nc + ' productos sin costo cargado'}: la ganancia real puede ser menor.</small>` : ''}`; });
+    }
+    ov.addEventListener('click', e => { if (!e.target.closest('[data-eye]')) return; showProfit = !showProfit; try { localStorage.setItem('affari:showProfit', showProfit ? '1' : '0'); } catch {} paintProfit(); });
     function sum() { const e = body.querySelector('[data-sum]'); if (e) e.innerHTML = `<div><span>Subtotal</span><span>${ars(sub())}</span></div><div><span>Descuento</span><span>− ${ars(disc())}</span></div><div class="t"><span>Total</span><span>${ars(total())}</span></div>`; }
     function foot() {
-      const f = $('[data-foot]');
-      if (S.step === 4) { f.innerHTML = `<button type="button" class="btn btn-primary btn-block" data-new>Nueva venta</button>`; f.querySelector('[data-new]').onclick = () => { ov.remove(); document.removeEventListener('keydown', onKey); refresh(); openSaleFlow(); }; return; }
+      const f = $('[data-foot]'); paintProfit();
+      if (S.step === 4) { f.innerHTML = `<button type="button" class="btn btn-primary btn-block" data-new>Nueva venta</button>`; f.querySelector('[data-new]').onclick = () => { ov.remove(); document.removeEventListener('keydown', onKey); Back.release(bh); refresh(); openSaleFlow(); }; return; }
       const lab = { 1: 'Ver resumen', 2: 'Continuar al pago', 3: S.paid ? 'Crear venta' : 'Anotar deuda' }[S.step];
       f.innerHTML = `<button type="button" class="sv-go" ${S.cart.size && !S.busy ? '' : 'disabled'}><span>${units()} · ${lab}</span><span>${ars(total())} ›</span></button>`;
       f.querySelector('.sv-go').onclick = () => S.step < 3 ? (S.step++, render(), body.scrollTo(0, 0)) : create();
@@ -112,9 +132,9 @@
       try {
         const cl = S.client, r = await api('/sales/cart', { method: 'POST', body: {
           items: [...S.cart.values()].map(i => ({ product_id: i.pid, variant_id: i.vid, qty: i.qty, price: i.price })), method: S.method, paid: S.paid, discount: disc(),
-          client_id: cl && cl.id || null, client_name: cl && !cl.id ? cl.name : '', client_phone: cl ? cl.phone || '' : '', concept: S.concept.trim(), note: S.note.trim() } });
-        const d = new Date();
-        S.receipt = { number: r.number, date: d.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }) + ' · ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+          client_id: cl && cl.id || null, client_name: cl && !cl.id ? cl.name : '', client_phone: cl ? cl.phone || '' : '', concept: S.concept.trim(), note: S.note.trim(), date: S.date !== todayStr() ? S.date : '' } });
+        const d = new Date(), custom = S.date !== todayStr(), dd = custom ? new Date(S.date + 'T12:00:00') : d;
+        S.receipt = { number: r.number, date: dd.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }) + (custom ? '' : ' · ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })),
           business: state.user.business, seller: state.user.name, client: r.client, concept: S.concept.trim(), note: S.note.trim(), items: r.items, subtotal: r.subtotal, discount: r.discount, total: r.total, paid: S.paid, method: S.method };
         S.step = 4; S.busy = false; render(); body.scrollTo(0, 0); toast('Venta registrada');
       } catch (e) { S.busy = false; foot(); toast(e.message); }
@@ -122,11 +142,14 @@
 
     /* ---- selector de cliente ---- */
     function pickClient() {
+      const hasPicker = !!(navigator.contacts && navigator.contacts.select), IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       const sh = document.createElement('div'); sh.className = 'sv-sheet';
       sh.innerHTML = `<div class="sv-sheet-box"><div class="sv-r"><h3>Cliente</h3><button type="button" class="icon-btn" data-sx aria-label="Cerrar">${icon('close')}</button></div>
         <input class="sv-in" type="search" data-sq placeholder="Buscar cliente…"><div class="sv-clist" data-cl></div>
         <div class="sv-lab">Agregar manualmente</div><input class="sv-in" data-nn placeholder="Nombre" maxlength="100"><input class="sv-in" data-np type="tel" inputmode="tel" placeholder="WhatsApp (ej. 351 555 0123)${S.paid ? ' · opcional' : ''}" style="margin-top:8px">
-        <div class="sv-r" style="margin-top:10px"><button type="button" class="btn" data-imp style="flex:1">Importar de contactos</button><button type="button" class="btn btn-primary" data-add style="flex:1">Usar cliente</button></div>
+        ${hasPicker ? '' : `<p class="muted sv-hint" style="margin:6px 0 0">${IOS ? 'El iPhone no deja que la web lea tu agenda. Copiá el número del contacto y tocá «Pegar número», o compartí el contacto como tarjeta (Contactos → Compartir contacto → Guardar en Archivos) y elegila acá.' : 'Tu navegador no permite abrir la agenda. Copiá el número del contacto y tocá «Pegar número», o elegí su tarjeta (.vcf).'}</p>`}
+        <div class="sv-r sv-imp" style="margin-top:10px">${hasPicker ? '<button type="button" class="btn" data-imp>Importar de contactos</button>' : '<button type="button" class="btn" data-paste>Pegar número</button><button type="button" class="btn" data-vcfbtn>Elegir tarjeta (.vcf)</button><input type="file" data-vcf accept=".vcf,text/vcard,text/x-vcard,text/directory" hidden>'}</div>
+        <div class="sv-r" style="margin-top:8px"><button type="button" class="btn btn-primary btn-block" data-add>Usar cliente</button></div>
         ${S.client ? '<button type="button" class="btn btn-block" data-none>Quitar cliente</button>' : ''}</div>`;
       ov.appendChild(sh);
       const done = c => { S.client = c; sh.remove(); render(); };
@@ -144,11 +167,27 @@
         const ex = clients.find(c => c.name.toLowerCase() === name.toLowerCase());
         done(ex ? { ...ex, phone: phone || ex.phone } : { id: null, name, phone });
       };
-      sh.querySelector('[data-imp]').onclick = async () => {
-        try { if (!navigator.contacts || !navigator.contacts.select) throw 0;
-          const r = await navigator.contacts.select(['name', 'tel'], { multiple: false });
-          if (r.length) { sh.querySelector('[data-nn]').value = (r[0].name || [''])[0] || ''; sh.querySelector('[data-np]').value = (r[0].tel || [''])[0] || ''; }
-        } catch { toast('Tu navegador no abre la agenda. Cargá el nombre y el número a mano o copialos desde WhatsApp.'); } };
+      const nn = sh.querySelector('[data-nn]'), np = sh.querySelector('[data-np]');
+      const cleanTel = t => String(t || '').replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '');
+      const fill = (name, tel) => { if (!name && !tel) return toast('No encontramos un nombre ni un teléfono.'); if (name) nn.value = name; if (tel) np.value = tel; toast('Contacto cargado: revisalo y tocá «Usar cliente»'); };
+      const parseVcf = txt => { const t = String(txt).replace(/\r?\n[ \t]/g, '');
+        const fn = /^FN(?:;[^:]*)?:(.+)$/im.exec(t), n = /^N(?:;[^:]*)?:(.+)$/im.exec(t), tel = /^(?:item\d+\.)?TEL(?:;[^:]*)?:(.+)$/im.exec(t);
+        return { name: fn ? fn[1].trim() : n ? n[1].split(';').filter(Boolean).reverse().join(' ').trim() : '', tel: tel ? cleanTel(tel[1]) : '' }; };
+      const imp = sh.querySelector('[data-imp]');   // Android (Chrome/Redmi/Samsung…): selector nativo de contactos
+      if (imp) imp.onclick = async () => {
+        try { const r = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+          if (r.length) fill((r[0].name || [''])[0] || '', cleanTel((r[0].tel || [''])[0]));
+        } catch (e) { if (e && e.name === 'AbortError') return; toast('No pudimos abrir tu agenda. Copiá el número y pegalo en el campo de teléfono.'); } };
+      const paste = sh.querySelector('[data-paste]');   // iPhone y navegadores sin selector: número copiado o tarjeta vCard
+      if (paste) paste.onclick = async () => {
+        let t = ''; try { t = await navigator.clipboard.readText(); } catch { return toast('No pudimos leer lo copiado. Mantené apretado el campo de teléfono y tocá Pegar.'); }
+        if (/BEGIN:VCARD/i.test(t)) { const c = parseVcf(t); return fill(c.name, c.tel); }
+        const m = /\+?\d[\d\s().-]{6,}\d/.exec(t); if (!m) return toast('Lo copiado no parece un número de teléfono.');
+        const name = t.replace(m[0], '').replace(/[\n\r:,;|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+        fill(name, cleanTel(m[0])); };
+      const vb = sh.querySelector('[data-vcfbtn]'), vf = sh.querySelector('[data-vcf]');
+      if (vb) { vb.onclick = () => vf.click();
+        vf.onchange = async () => { const f = vf.files[0]; vf.value = ''; if (!f) return; try { const c = parseVcf(await f.text()); fill(c.name, c.tel); } catch { toast('No pudimos leer esa tarjeta de contacto.'); } }; }
     }
 
     /* ---- comprobante ---- */

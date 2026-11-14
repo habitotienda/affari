@@ -12,7 +12,8 @@ function openModal({ title, html, submit = 'Guardar', onSubmit, wide, hideSubmit
     <div class="error hidden" data-err role="alert"></div>${html}${hideSubmit ? '' : `<button class="btn btn-primary btn-block" data-submit>${submit}</button>`}</form>`;
   const form = ov.querySelector('form');
   const onKey = e => e.key === 'Escape' && close();
-  const close = () => { document.removeEventListener('keydown', onKey); ov.classList.add('closing'); setTimeout(() => ov.remove(), 180); };
+  const close = () => { document.removeEventListener('keydown', onKey); Back.release(bh); ov.classList.add('closing'); setTimeout(() => ov.remove(), 180); };
+  const bh = Back.open({ onBack: () => { close(); } });          // «atrás» del celular cierra el diálogo
   document.addEventListener('keydown', onKey);
   ov.onclick = e => { if (e.target === ov) close(); };
   form.querySelector('[data-close]').onclick = close;
