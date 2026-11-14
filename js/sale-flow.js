@@ -12,19 +12,15 @@
     try { [products, clients] = await Promise.all([api('/products'), api('/clients')]); } catch (e) { return toast(e.message); }
     const rows = [];
     products.filter(p => p.active && p.stock > 0).forEach(p => {
-      if (p.variants && p.variants.length) p.variants.filter(v => v.stock > 0).forEach(v => rows.push({ key: `${p.id}:${v.id}`, pid: p.id, vid: v.id, name: `${p.name} · ${v.name}`, price: v.price || p.price, cost: v.cost || p.cost || 0, stock: v.stock, img: p.images && p.images[0] }));
-      else rows.push({ key: `${p.id}:0`, pid: p.id, vid: null, name: p.name, price: p.price, cost: p.cost || 0, stock: p.stock, img: p.images && p.images[0] });
+      if (p.variants && p.variants.length) p.variants.filter(v => v.stock > 0).forEach(v => rows.push({ key: `${p.id}:${v.id}`, pid: p.id, vid: v.id, name: `${p.name} · ${v.name}`, price: v.price || p.price, stock: v.stock, img: p.images && p.images[0] }));
+      else rows.push({ key: `${p.id}:0`, pid: p.id, vid: null, name: p.name, price: p.price, stock: p.stock, img: p.images && p.images[0] });
     });
     const todayStr = () => { const d = new Date(), z = k => String(k).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
-    let showProfit = true; try { showProfit = localStorage.getItem('affari:showProfit') !== '0'; } catch {}
     const S = { step: 1, date: todayStr(), q: '', cart: new Map(), paid: true, method: 'Efectivo', dtype: '%', dval: 0, client: null, concept: '', note: '', receipt: null, busy: false };
     const thumb = x => `<div class="sv-th">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : esc((x.name[0] || '?').toUpperCase())}</div>`;
     const sub = () => [...S.cart.values()].reduce((a, i) => a + i.qty * i.price, 0);
     const disc = () => n2(Math.min(sub(), S.dtype === '%' ? sub() * Math.min(S.dval, 100) / 100 : S.dval));
     const total = () => n2(sub() - disc());
-    const costOf = () => [...S.cart.values()].reduce((a, i) => a + i.qty * (Number(i.cost) || 0), 0);
-    const profit = () => n2(total() - costOf());
-    const noCost = () => [...S.cart.values()].filter(i => !(Number(i.cost) > 0)).length;
     const units = () => [...S.cart.values()].reduce((a, i) => a + i.qty, 0);
 
     const ov = document.createElement('div'); ov.className = 'sv';
@@ -77,7 +73,7 @@
           <div class="sv-r"><div class="sv-stp"><button type="button" data-m="${i.key}" aria-label="Quitar uno">−</button><b>${i.qty}</b><button type="button" data-p="${i.key}" aria-label="Agregar uno">+</button></div>
           <label class="sv-price">$<input class="sv-in" type="number" min="0" step="any" inputmode="decimal" value="${i.price}" data-pr="${i.key}" aria-label="Precio unitario"></label></div>
           <small class="muted">${i.qty} × ${ars(i.price)} = <b data-line="${i.key}">${ars(i.qty * i.price)}</b></small></div>`).join('')
-          + `<button type="button" class="btn btn-block" data-more>${icon('plus')}Agregar más productos</button><div data-prof></div><p class="muted sv-hint">Al crear la venta se descuentan las unidades de tu inventario.</p>`;
+          + `<button type="button" class="btn btn-block" data-more>${icon('plus')}Agregar más productos</button><p class="muted sv-hint">Al crear la venta se descuentan las unidades de tu inventario.</p>`;
         body.onclick = e => { const b = e.target.closest('button'); if (!b) return;
           if (b.dataset.p) setQty(b.dataset.p, 1); if (b.dataset.m) setQty(b.dataset.m, -1);
           if (b.dataset.rm) { S.cart.delete(b.dataset.rm); S.cart.size ? render() : (S.step = 1, render()); }
@@ -94,7 +90,7 @@
           <div class="sv-lab">Fecha de la venta</div><input class="sv-in" type="date" data-date max="${todayStr()}" value="${S.date}" aria-label="Fecha de la venta">
           <div class="sv-lab">Concepto</div><input class="sv-in" data-cc maxlength="120" placeholder="Dale un nombre a tu venta" value="${esc(S.concept)}">
           <div class="sv-lab">Nota en el comprobante</div><textarea class="sv-in" rows="3" data-nt maxlength="300" placeholder="Agregar nota…">${esc(S.note)}</textarea>
-          <div class="sv-sum" data-sum></div><div data-prof></div>`;
+          <div class="sv-sum" data-sum></div>`;
         sum();
         body.onclick = e => { const b = e.target.closest('button'); if (!b) return;
           if (b.dataset.paid) { S.paid = b.dataset.paid === '1'; render(); }
@@ -109,17 +105,9 @@
       if (S.step === 4) drawReceipt();
       foot();
     }
-    function paintProfit() {
-      const p = profit(), t = total(), pct = t > 0 ? Math.round(p / t * 100) : 0, nc = noCost();
-      ov.querySelectorAll('[data-prof]').forEach(e => { e.className = 'sv-prof' + (p < 0 ? ' neg' : '');
-        e.innerHTML = `<div class="sv-prof-r"><span>Ganancia estimada</span><button type="button" class="sv-eye" data-eye aria-label="${showProfit ? 'Ocultar' : 'Mostrar'} ganancia" aria-pressed="${showProfit}">${showProfit ? '🙈' : '👁'}</button></div>
-          <strong>${showProfit ? ars(p) : '$ ••••'}</strong>${showProfit ? `<span class="sv-pct">${pct}% del total</span>` : ''}
-          ${nc ? `<small class="muted">${nc === 1 ? '1 producto sin costo cargado' : nc + ' productos sin costo cargado'}: la ganancia real puede ser menor.</small>` : ''}`; });
-    }
-    ov.addEventListener('click', e => { if (!e.target.closest('[data-eye]')) return; showProfit = !showProfit; try { localStorage.setItem('affari:showProfit', showProfit ? '1' : '0'); } catch {} paintProfit(); });
     function sum() { const e = body.querySelector('[data-sum]'); if (e) e.innerHTML = `<div><span>Subtotal</span><span>${ars(sub())}</span></div><div><span>Descuento</span><span>− ${ars(disc())}</span></div><div class="t"><span>Total</span><span>${ars(total())}</span></div>`; }
     function foot() {
-      const f = $('[data-foot]'); paintProfit();
+      const f = $('[data-foot]');
       if (S.step === 4) { f.innerHTML = `<button type="button" class="btn btn-primary btn-block" data-new>Nueva venta</button>`; f.querySelector('[data-new]').onclick = () => { ov.remove(); document.removeEventListener('keydown', onKey); Back.release(bh); refresh(); openSaleFlow(); }; return; }
       const lab = { 1: 'Ver resumen', 2: 'Continuar al pago', 3: S.paid ? 'Crear venta' : 'Anotar deuda' }[S.step];
       f.innerHTML = `<button type="button" class="sv-go" ${S.cart.size && !S.busy ? '' : 'disabled'}><span>${units()} · ${lab}</span><span>${ars(total())} ›</span></button>`;
