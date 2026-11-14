@@ -34,8 +34,9 @@ async function openMovesModal(kind, p) {
   const rows = await api(`/${kind}/${p.id}/moves`);
   const lbl = m => kind === 'clients' ? (m.is_payment ? 'Cobro' : KIND[m.kind]) : (m.kind === 'compra' ? 'Compra' : 'Pago');
   const neg = m => kind === 'clients' ? m.kind === 'salida' : m.kind === 'pago';
-  openModal({ title: `Movimientos · ${p.name}`, hideSubmit: true, wide: true,
-    html: rows.length ? `<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Tipo</th><th class="num">Monto</th></tr></thead><tbody>${rows.map(m => `<tr><td class="muted">${when(m.created_at)}</td><td>${esc(m.concept)}${m.due_date ? `<span class="cell-sub">Vence ${dmy(m.due_date)}</span>` : ''}</td><td>${lbl(m)}</td><td class="num ${neg(m) ? 'neg' : ''}">${ars2(m.amount)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Sin movimientos todavía.</div>' });
+  const { form } = openModal({ title: `Movimientos · ${p.name}`, hideSubmit: true, wide: true,
+    html: rows.length ? `<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Tipo</th><th class="num">Monto</th></tr></thead><tbody>${rows.map((m, ix) => `<tr${tkAttr(m, ix)}><td class="muted">${when(m.created_at)}</td><td>${esc(m.concept)}${tkChip(m)}${m.due_date ? `<span class="cell-sub">Vence ${dmy(m.due_date)}</span>` : ''}</td><td>${lbl(m)}</td><td class="num ${neg(m) ? 'neg' : ''}">${ars2(m.amount)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Sin movimientos todavía.</div>' });
+  bindTickets(form, rows);
 }
 
 /* ---------- Clientes ---------- */
@@ -120,7 +121,7 @@ function cfBody(d, closures) {
       <form data-close><div class="row2">${fld(`Efectivo contado (esperado ${ars2(d.expected_cash)})`, `<input name="counted" type="number" min="0" step="any" inputmode="decimal" required value="${cl ? cl.counted : ''}">`)}
       ${fld('Observaciones', `<input name="notes" maxlength="300" placeholder="Opcional" value="${esc(cl ? cl.notes : '')}">`)}</div>
       <div class="toolbar"><button class="btn btn-primary">${cl ? 'Actualizar cierre' : 'Cerrar caja'}</button><span class="diff hidden" data-live-diff></span></div></form></section>
-    <div class="grid2"><div class="card tbl-wrap"><div class="section-title">Movimientos del día</div>${d.moves.length ? `<table><thead><tr><th>Hora</th><th>Concepto</th><th>Medio</th><th class="num">Monto</th></tr></thead><tbody>${d.moves.map(x => `<tr><td class="muted">${x.created_at.slice(11, 16)}</td><td>${esc(x.concept)}<span class="cell-sub">${x.supplier_id ? 'Proveedor' : x.is_payment ? 'Cobro de fiado' : KIND[x.kind]}</span></td><td>${esc(x.method)}</td><td class="num ${x.kind === 'salida' ? 'neg' : ''}">${x.kind === 'salida' ? '−' : ''}${ars2(x.amount)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No hubo movimientos este día.</div>'}</div>
+    <div class="grid2"><div class="card tbl-wrap"><div class="section-title">Movimientos del día</div>${d.moves.length ? `<table><thead><tr><th>Hora</th><th>Concepto</th><th>Medio</th><th class="num">Monto</th></tr></thead><tbody>${d.moves.map((x, ix) => `<tr${tkAttr(x, ix)}><td class="muted">${x.created_at.slice(11, 16)}</td><td>${esc(x.concept)}${tkChip(x)}<span class="cell-sub">${x.supplier_id ? 'Proveedor' : x.is_payment ? 'Cobro de fiado' : KIND[x.kind]}</span></td><td>${esc(x.method)}</td><td class="num ${x.kind === 'salida' ? 'neg' : ''}">${x.kind === 'salida' ? '−' : ''}${ars2(x.amount)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No hubo movimientos este día.</div>'}</div>
       <div class="card tbl-wrap"><div class="section-title">Últimos cierres</div>${closures.length ? `<table><thead><tr><th>Día</th><th class="num">Esperado</th><th class="num">Contado</th><th>Resultado</th></tr></thead><tbody>${closures.map(c => `<tr><td>${dmy(c.day)}</td><td class="num">${ars2(c.expected)}</td><td class="num">${ars2(c.counted)}</td><td><span class="diff ${diffCls(c.diff)}">${diffTxt(c.diff)}</span></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Todavía no cerraste ninguna caja.</div>'}</div></div>`;
 }
 VIEWS.flujo = async function (el) {
@@ -146,7 +147,7 @@ VIEWS.flujo = async function (el) {
     try {
       const [d, cls] = await Promise.all([api('/cashflow?day=' + day), api('/cashflow/closures')]), s = JSON.stringify([d, cls]);
       if (s === last || (quiet && body.contains(document.activeElement) && document.activeElement.tagName === 'INPUT')) return;   // no pisar lo que se está escribiendo
-      last = s; expected = d.expected_cash; body.innerHTML = cfBody(d, cls); bind();
+      last = s; expected = d.expected_cash; body.innerHTML = cfBody(d, cls); bind(); bindTickets(body, d.moves);
       const l = el.querySelector('[data-live] span'); if (l) l.textContent = 'En vivo · ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     } catch (e) { if (e.status === 401) return logout(); if (!quiet) body.innerHTML = `<div class="error">${esc(e.message)}</div>`; }
   };

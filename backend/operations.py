@@ -18,6 +18,44 @@ SALE = "kind IN ('entrada','fiado') AND is_payment=0"
 r2 = lambda x: round(float(x or 0), 2)
 
 # ---------------------------------------------------------------- helpers compartidos con app.py
+_SALE_COLS = ("s.id,s.kind,s.concept,s.amount,s.method,s.is_payment,s.supplier_id,s.created_at,s.ticket,s.ticket_concept,"
+              "s.product_id,s.product_name,s.variant_name,s.qty,cl.name AS client_name,p.img_n AS img_n,p.img_v AS img_v")
+
+def grouped_sales(c, sid, where="", params=(), limit=100):
+    """Movimientos de caja, más nuevos primero. Los productos vendidos juntos (misma `ticket`) vuelven como UNA sola fila
+    con `items` (el detalle: nombre, variante, cantidad, monto y foto). `where` filtra sobre el alias s (ej. "AND s.client_id=?")."""
+    base = ("SELECT " + _SALE_COLS + " FROM sales s LEFT JOIN clients cl ON cl.id = s.client_id LEFT JOIN products p ON p.id = s.product_id "
+            "WHERE s.store_id=? ")
+    rows = [dict(r) for r in c.execute(base + where + " ORDER BY s.id DESC LIMIT ?", (sid, *params, limit))]
+    tks = {r["ticket"] for r in rows if r["ticket"]}
+    if tks:                                  # si el corte partió una venta por la mitad, se traen las filas que faltan
+        have = {r["id"] for r in rows}
+        extra = c.execute(base + f"AND s.ticket IN ({','.join('?' * len(tks))}) AND s.id < ?", (sid, *tks, min(have)))
+        rows += [dict(r) for r in extra if r["id"] not in have]
+        rows.sort(key=lambda r: -r["id"])
+    out, groups = [], {}
+    for r in rows:
+        tk, client = r["ticket"], r.get("client_name") or ""
+        if not tk:
+            out.append({k: r[k] for k in ("id", "kind", "concept", "amount", "method", "is_payment", "supplier_id", "created_at")}); continue
+        img = f"/api/img/{r['product_id']}/0?v={r['img_v']}" if r.get("img_n") and r.get("product_id") else ""
+        item = {"name": r["product_name"] or r["concept"], "variant": r["variant_name"] or "", "qty": r["qty"], "amount": r["amount"], "img": img}
+        if tk in groups:
+            g = groups[tk]; g["items"].insert(0, item); g["amount"] = round(g["amount"] + r["amount"], 2); continue
+        g = {"id": r["id"], "kind": r["kind"], "concept": r["concept"], "amount": r["amount"], "method": r["method"], "is_payment": r["is_payment"],
+             "supplier_id": r["supplier_id"], "created_at": r["created_at"], "items": [item], "_title": r["ticket_concept"] or "", "_client": client}
+        groups[tk] = g; out.append(g)
+    for g in out:
+        if "items" not in g: continue
+        title, client = g.pop("_title"), g.pop("_client")
+        n = len(g["items"])
+        if n < 2:                                          # una venta de un solo producto se ve como siempre
+            g.pop("items"); continue
+        label = title or f"Venta de {n} productos"
+        g["concept"] = f"Fiado: {client} · {label}" if g["kind"] == "fiado" and client else label
+        g["units"] = sum(i["qty"] for i in g["items"])
+    return out
+
 def sync_variant_stock(c, pid):
     """Si el producto tiene variantes, su stock total es la suma de ellas."""
     if c.execute("SELECT 1 FROM product_variants WHERE product_id=?", (pid,)).fetchone():
@@ -221,8 +259,7 @@ def make_router(current_user):
         with db.conn() as c:
             if not c.execute("SELECT 1 FROM clients WHERE id=? AND store_id=?", (cid, u["store_id"])).fetchone():
                 raise HTTPException(404, "Cliente inexistente.")
-            rows = c.execute("SELECT id,kind,concept,amount,method,is_payment,created_at FROM sales WHERE client_id=? ORDER BY id DESC LIMIT 60", (cid,)).fetchall()
-        return [dict(r) for r in rows]
+            return grouped_sales(c, u["store_id"], "AND s.client_id=? ", (cid,), 60)
 
     # ----- Proveedores -----
     def own_supplier(c, u, sid):
@@ -342,7 +379,7 @@ def make_router(current_user):
                        SUM(CASE WHEN kind='salida' AND supplier_id IS NULL THEN amount END) gastos,
                        SUM(CASE WHEN kind='salida' AND supplier_id IS NOT NULL THEN amount END) proveedores
                        FROM sales WHERE store_id=? AND date(created_at)=?""", (sid, day)).fetchone()
-            moves = [dict(r) for r in c.execute("SELECT id,kind,concept,amount,method,is_payment,supplier_id,created_at FROM sales WHERE store_id=? AND date(created_at)=? ORDER BY id DESC LIMIT 300", (sid, day))]
+            moves = grouped_sales(c, sid, "AND date(s.created_at)=? ", (day,), 300)
             closure = c.execute("SELECT day,expected,counted,diff,notes,created_at FROM cash_closures WHERE store_id=? AND day=?", (sid, day)).fetchone()
             recv = c.execute("SELECT SUM(balance) FROM clients WHERE store_id=?", (sid,)).fetchone()[0]
             pay = c.execute("SELECT SUM(balance) FROM suppliers WHERE store_id=?", (sid,)).fetchone()[0]

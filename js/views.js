@@ -6,6 +6,7 @@ const KIND = { entrada: 'Entrada', salida: 'Salida', fiado: 'Fiado' };
 /* Venta con varios productos: en las listas es UNA sola fila (m.items trae el detalle); al tocarla se abre «Esta venta tuvo…» */
 const tkAttr = (m, ix) => m.items ? ` class="tk-row" data-tk="${ix}" tabindex="0" role="button" aria-label="Ver los productos de esta venta"` : '';
 const tkChip = m => m.items ? `<span class="tk-n">${m.items.length} productos ›</span>` : '';
+const tkThumb = i => `<div class="tk-th">${i.img ? `<img src="${esc(sfThumb(i.img, 160))}" alt="" decoding="async">` : esc(((i.name || '?')[0] || '?').toUpperCase())}</div>`;
 function bindTickets(el, list) {
   el.querySelectorAll('[data-tk]').forEach(r => {
     const open = () => openTicket(list[+r.dataset.tk]);
@@ -17,7 +18,7 @@ function openTicket(m) {
   openModal({ title: 'Detalle de la venta', hideSubmit: true, html: `
     <div class="tk-head"><strong>${esc(m.concept)}</strong><span class="muted">${when(m.created_at)} · ${esc(m.method)}</span></div>
     <div class="tk-lab">Esta venta tuvo ${items.length} productos (${units} ${units === 1 ? 'unidad' : 'unidades'})</div>
-    <ul class="tk-list">${items.map(i => `<li><span class="tk-q">${i.qty} ×</span><span class="tk-nm">${esc(i.name)}${i.variant ? ` <small class="muted">· ${esc(i.variant)}</small>` : ''}</span><b>${ars(i.amount)}</b></li>`).join('')}</ul>
+    <ul class="tk-list">${items.map(i => `<li>${tkThumb(i)}<span class="tk-q">${i.qty} ×</span><span class="tk-nm">${esc(i.name)}${i.variant ? ` <small class="muted">· ${esc(i.variant)}</small>` : ''}</span><b>${ars(i.amount)}</b></li>`).join('')}</ul>
     <div class="tk-total"><span>Total</span><strong>${ars(m.amount)}</strong></div>
     <p class="muted tk-hint">Los montos ya incluyen el descuento, si lo hubo.</p>` });
 }

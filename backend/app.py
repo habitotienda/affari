@@ -342,39 +342,8 @@ def dashboard(u=Depends(current_user)):
 
 take_product = ops.take_product      # descuenta stock del producto o de su variante
 
-_SALE_COLS = "s.id,s.kind,s.concept,s.amount,s.method,s.is_payment,s.created_at,s.ticket,s.ticket_concept,s.product_name,s.variant_name,s.qty,cl.name AS client_name"
-
 def recent_sales(c, sid, limit):
-    """Últimos movimientos. Los productos vendidos juntos (misma `ticket`) vuelven como UNA sola fila con `items` (el detalle)."""
-    base = f"SELECT {_SALE_COLS} FROM sales s LEFT JOIN clients cl ON cl.id = s.client_id WHERE s.store_id=?"
-    rows = [dict(r) for r in c.execute(base + " ORDER BY s.id DESC LIMIT ?", (sid, limit))]
-    tks = {r["ticket"] for r in rows if r["ticket"]}
-    if tks and rows:                       # si el corte partió una venta por la mitad, se traen las filas que faltan
-        have = {r["id"] for r in rows}
-        extra = c.execute(base + f" AND s.ticket IN ({','.join('?' * len(tks))}) AND s.id < ?", (sid, *tks, min(have)))
-        rows += [dict(r) for r in extra if r["id"] not in have]
-        rows.sort(key=lambda r: -r["id"])
-    out, groups = [], {}
-    for r in rows:
-        r["client_name"] = r.get("client_name") or ""
-        tk = r["ticket"]
-        if not tk:
-            out.append({k: r[k] for k in ("id", "kind", "concept", "amount", "method", "is_payment", "created_at")}); continue
-        item = {"name": r["product_name"] or r["concept"], "variant": r["variant_name"] or "", "qty": r["qty"], "amount": r["amount"]}
-        if tk in groups:
-            g = groups[tk]; g["items"].insert(0, item); g["amount"] = round(g["amount"] + r["amount"], 2); continue
-        g = {"id": r["id"], "kind": r["kind"], "concept": r["concept"], "amount": r["amount"], "method": r["method"], "is_payment": r["is_payment"],
-             "created_at": r["created_at"], "items": [item], "title": r["ticket_concept"] or "", "client": r["client_name"]}
-        groups[tk] = g; out.append(g)
-    for g in out:
-        if "items" not in g: continue
-        n = len(g["items"])
-        if n < 2:                                          # una venta de un solo producto se ve como siempre
-            g.pop("items"); g.pop("title"); g.pop("client"); continue
-        label = g.pop("title") or f"Venta de {n} productos"
-        g["concept"] = f"Fiado: {g['client']} · {label}" if g["kind"] == "fiado" and g["client"] else label
-        g["units"] = sum(i["qty"] for i in g["items"])
-    return out
+    return ops.grouped_sales(c, sid, "", (), limit)
 
 @app.get("/api/sales")
 def list_sales(limit: int = 100, u=Depends(current_user)):
@@ -582,6 +551,7 @@ def _warm_now(pid, imgs):
 
 @app.get("/api/products")
 def list_products(u=Depends(current_user)):
+    _warm_store(u["store_id"])                      # si a algún producto le faltan miniaturas, se preparan en segundo plano
     with db.conn() as c:
         rows = c.execute("SELECT id,store_id,name,description,price,cost,stock,min_stock,active,category,img_n,img_v FROM products WHERE store_id=? ORDER BY name COLLATE NOCASE", (u["store_id"],)).fetchall()
         out = ops.attach_variants(c, [clean_product({**{k: v for k, v in dict(r).items() if k not in ("img_n", "img_v")}, "active": bool(r["active"]),
@@ -643,20 +613,40 @@ def _warm_later(pid, v, delay=3):
         except Exception: pass
     t = threading.Timer(delay, run); t.daemon = True; t.start()
 
+_MISSING = "SELECT p.id, p.img_v FROM products p WHERE p.img_n>0 AND NOT EXISTS (SELECT 1 FROM product_thumbs t WHERE t.product_id=p.id AND t.v=p.img_v)"
+
 def _warm_store(sid):
-    """Al abrirse un catálogo: genera, de a uno, las miniaturas que falten. Como máximo una vez cada 10 minutos por comercio."""
+    """Genera, de a uno, las miniaturas que falten de un comercio (se llama al abrir el catálogo o el panel). Como máximo una vez cada 10 minutos por comercio."""
     if time.time() - _WARM_AT.get(sid, 0) < 600:
         return
     _WARM_AT[sid] = time.time()
     def run():
         try:
             with db.conn() as c:
-                rows = c.execute("SELECT id, img_v FROM products WHERE store_id=? AND active=1 AND img_n>0 AND id NOT IN (SELECT product_id FROM product_thumbs) LIMIT 200", (sid,)).fetchall()
+                rows = c.execute(_MISSING + " AND p.store_id=? LIMIT 300", (sid,)).fetchall()
             for r in rows:
                 _gen_thumbs(r["id"], r["img_v"])
         except Exception:
             pass
     threading.Thread(target=run, daemon=True).start()
+
+def _warm_all():
+    """Al arrancar el servidor: deja listas las miniaturas de TODOS los productos que no las tengan (productos viejos, cambios de versión,
+    miniaturas que fallaron). Va de a poco para no frenar a quien esté usando la app."""
+    time.sleep(8)
+    tried = set()                                            # un producto cuya foto no se pudo achicar no se reintenta en bucle
+    for _ in range(40):                                      # tope de seguridad: 40 tandas de 25 productos
+        try:
+            with db.conn() as c:
+                rows = [r for r in c.execute(_MISSING + " LIMIT 200").fetchall() if (r["id"], r["img_v"]) not in tried][:25]
+            if not rows: return
+            for r in rows:
+                tried.add((r["id"], r["img_v"]))
+                _gen_thumbs(r["id"], r["img_v"]); time.sleep(0.15)
+        except Exception:
+            time.sleep(5)
+
+threading.Thread(target=_warm_all, daemon=True).start()
 
 _IMG_HEADERS = {"Cache-Control": "public, max-age=31536000, immutable"}
 _IMG_SHORT = {"Cache-Control": "public, max-age=60"}            # respuestas de emergencia: no quedan guardadas para siempre
