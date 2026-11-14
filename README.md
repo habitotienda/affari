@@ -85,6 +85,10 @@ Pruebas: `node tests/js/datastore.test.js` · `node tests/js/navigation.test.js`
 Flujo en 4 pasos (`js/sale-flow.js`, `css/sale-flow.css`): **1** buscar y sumar productos (con variantes) → **2** resumen en lista (cantidad y precio editables) → **3** pago: Pagado/Deuda, medio, descuento % o $, cliente (de tu lista, manual o importado de la agenda del teléfono), concepto y nota → **4** comprobante en imagen PNG para **Compartir**, **WhatsApp** (al número del cliente) o **Guardar**.
 Backend: `POST /api/sales/cart` (varios productos en una venta; una fila de caja por producto con el descuento repartido; si es Deuda queda como fiado del cliente). La sección «Comprobantes» (facturas) se sacó del menú; las rutas `/api/invoices` y `/api/fiscal` siguen en el backend por si se retoman.
 
+## Rutas con `#` y «Ver más» en el catálogo
+- **Rutas del panel** (`js/app.js`): cada sección tiene su link (`/#/inicio`, `/#/caja`, `/#/productos` = Inventario, `/#/catalogo`, `/#/clientes`…). Al recargar se queda en la sección y el botón «atrás» del celular vuelve a la sección anterior del panel sin salirse de la app. Admite tildes (`/#/catálogo`) y subrutas (`/#/productos/12` abre Productos).
+- **Ver más** (`js/store/storefront.js`, `css/storefront.css`): si la descripción de un producto no entra en 2 líneas, aparece «Ver más» y abre una hoja con la descripción completa, foto, precio y el botón de agregar. En el catálogo público, «atrás» cierra la hoja en vez de salir de la página.
+
 ## Estructura
 ```
 backend/

@@ -60,7 +60,7 @@ const Billing = (() => {
   async function afterLogin() {
     const pago = new URLSearchParams(location.search).get('pago');
     if (pago) {
-      history.replaceState(null, '', location.pathname);
+      history.replaceState(null, '', location.pathname + location.hash);
       if (pago === 'ok') {
         toast('Pago recibido. Activando tu plan…');
         for (let i = 0; i < 8 && info().state !== 'paid'; i++) { await new Promise(r => setTimeout(r, 3000)); try { await reload(); } catch {} }

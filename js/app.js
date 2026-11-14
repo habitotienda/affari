@@ -7,6 +7,21 @@ const NAV = [
   ['proveedores', 'Proveedores', 'truck'], ['catalogo', 'Catálogo Digital', 'store'], ['estudio', 'Estudio de Diseño', 'palette'], ['config', 'Configuración', 'settings']
 ];
 const state = { user: null, view: 'dashboard', tk: 0 };
+/* ---------- Rutas con # (recargar no te lleva al inicio; «atrás» del celular vuelve a la sección anterior) ----------
+   #/inicio · #/caja · #/productos (inventario) · #/catalogo · #/clientes … */
+const ROUTE_SLUG = { dashboard: 'inicio', inventario: 'productos' };
+const routeOf = v => '#/' + (ROUTE_SLUG[v] || v);
+const viewFromHash = () => {
+  let s = ''; try { s = decodeURIComponent(location.hash.replace(/^#\/?/, '').split(/[/?]/)[0]); } catch {}
+  s = s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const v = { inicio: 'dashboard', productos: 'inventario', stock: 'inventario' }[s] || s;
+  return NAV.some(n => n[0] === v) ? v : null;
+};
+const initialView = () => { const v = viewFromHash() || 'dashboard'; try { history.replaceState(history.state, '', routeOf(v)); } catch {} return v; };
+window.addEventListener('hashchange', () => {       // botón atrás/adelante, o cambio manual del link
+  if (!state.user) return;
+  const v = viewFromHash() || 'dashboard'; if (v !== state.view) go(v, true);
+});
 /* ---------- PWA: instalación y Service Worker ---------- */
 const PWA = (() => {
   let deferred = null;                                       // evento beforeinstallprompt guardado
@@ -71,7 +86,7 @@ function toast(msg) {
   document.body.appendChild(t); setTimeout(() => t.remove(), 2400);
 }
 
-function logout() { if (state.stop) state.stop(); setDrawer(false); Session.clear(); state.user = null; state.draft = null; boot(); }
+function logout() { if (state.stop) state.stop(); setDrawer(false); Session.clear(); state.user = null; state.draft = null; try { history.replaceState(null, '', location.pathname); } catch {} boot(); }
 
 /* Menú lateral en celular (botón de tres rayas): se abre como cajón sobre el contenido */
 function setDrawer(open) {
@@ -122,7 +137,8 @@ function renderShell() {
   side.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
   side.addEventListener('touchend', e => { if (x0 !== null && e.changedTouches[0].clientX - x0 < -60) setDrawer(false); x0 = null; }, { passive: true });
 }
-function go(view) {
+function go(view, fromRoute) {
+  if (!fromRoute && location.hash !== routeOf(view)) { try { history.pushState(null, '', routeOf(view)); } catch {} }
   if (state.stop) state.stop();          // corta la actualización en vivo de la vista anterior
   state.view = view;
   root.querySelectorAll('[data-view]').forEach(b => {
@@ -189,7 +205,7 @@ function drawDashboard(el, d) {
 async function boot() {
   if (Session.token) {
     DataStore.prefetch(['/dashboard']);                       // el dashboard baja en paralelo con /me (antes iban uno detrás del otro)
-    try { state.user = await api('/me'); renderShell(); renderView(); warmIdle(); Billing.afterLogin(); return; }
+    try { state.user = await api('/me'); state.view = initialView(); renderShell(); renderView(); warmIdle(); Billing.afterLogin(); return; }
     catch (e) {
       if (e.status !== 401) {                                 // sin internet o servidor caído: no se cierra la sesión, se ofrece reintentar
         root.innerHTML = `<div class="empty" style="margin:20vh auto;max-width:360px">${esc(e.message)}<br><br><button class="btn btn-primary" id="retry">Reintentar</button></div>`;
@@ -198,7 +214,7 @@ async function boot() {
       Session.clear();
     }
   }
-  const onAuth = u => { state.user = u; state.view = 'dashboard'; renderShell(); renderView(); warmIdle(); Billing.afterLogin(); };
+  const onAuth = u => { state.user = u; state.view = initialView(); renderShell(); renderView(); warmIdle(); Billing.afterLogin(); };
   const showAuth = mode => { window.scrollTo(0, 0); renderAuth(root, onAuth, mode, showLanding); };
   function showLanding() { window.scrollTo(0, 0); GoogleAuth.preload(); renderLanding(root, { onLogin: () => showAuth('login'), onRegister: () => showAuth('register') }); }
   showLanding();

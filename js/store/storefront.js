@@ -2,7 +2,7 @@
    mountStore(el, { store, products, slug }) -> { update({ store, products }) } */
 function mountStore(el, init) {
   let stopPromos = () => {}, paused = false;   // paused se ajusta más abajo: en celulares modestos el fondo animado arranca pausado
-  let store = init.store, products = init.products || [], cat = '', flt = { sort: '', min: '', max: '', stock: false }, lb = null, opener = null, drawer = false, formOpen = false;
+  let store = init.store, products = init.products || [], cat = '', flt = { sort: '', min: '', max: '', stock: false }, lb = null, opener = null, drawer = false, formOpen = false, detail = null;
   const info = { name: '', phone: '', delivery: '', address: '', note: '' };   // delivery: '' (sin elegir) | 'retiro' | 'envio'
   const byId = id => products.find(p => p.id === id);
   const cart = sfCart(init.slug ? 'affari:cart:' + init.slug : null, byId);
@@ -53,7 +53,7 @@ function mountStore(el, init) {
     const out = p.stock <= 0;
     return `<article class="sf-card${out ? ' out' : ''}"><div class="sf-gal">${sfGallery(p)}
       ${out ? '<span class="sf-flag out">Agotado</span>' : p.stock <= 3 ? '<span class="sf-flag">Últimas unidades</span>' : ''}</div>
-      <div class="sf-info"><h3>${sfEsc(p.name)}</h3>${p.description ? `<p>${sfEsc(p.description)}</p>` : ''}
+      <div class="sf-info"><h3>${sfEsc(p.name)}</h3>${p.description ? `<p>${sfEsc(p.description)}</p><button type="button" class="sf-more" data-more="${p.id}" hidden>Ver más</button>` : ''}
       <div class="sf-row"><span class="sf-price">${sfArs(p.price)}</span>${out ? '' : `<span class="sf-stock">Stock ${p.stock}</span>`}</div><div data-step="${p.id}">${stepHTML(p)}</div></div></article>`;
   };
 
@@ -166,6 +166,36 @@ function mountStore(el, init) {
   };
   const closeLightbox = () => { if (!lb) return; lb.el.remove(); lb = null; if (!drawer && !embedded) document.body.style.overflow = ''; };
 
+  /* «Ver más»: hoja con la descripción completa. En el celular el botón «atrás» la cierra (no saca al visitante del catálogo). */
+  const markMore = () => {
+    const ps = [...el.querySelectorAll('[data-list] .sf-info > p')], over = ps.map(p => p.scrollHeight > p.clientHeight + 1);
+    ps.forEach((p, i) => { const b = p.nextElementSibling; if (b && b.hasAttribute('data-more')) b.hidden = !over[i]; });
+  };
+  const openDetail = p => {
+    if (detail || !p) return; opener = document.activeElement; const out = p.stock <= 0, img = p.images && p.images[0];
+    detail = { pushed: !embedded };
+    layer.insertAdjacentHTML('beforeend', `<div class="sf-scrim" data-close-detail></div>
+      <section class="sf-detail" role="dialog" aria-modal="true" aria-label="${sfEsc(p.name)}">
+        <header class="sf-dth"><h2>${sfEsc(p.name)}</h2><button type="button" class="sf-x" data-close-detail aria-label="Cerrar">${SF_ICON.close}</button></header>
+        <div class="sf-dbody">${img ? `<img class="sf-dimg" src="${sfEsc(sfThumb(img, 800))}" alt="${sfEsc(p.name)}">` : ''}
+          <div class="sf-row"><span class="sf-price">${sfArs(p.price)}</span>${out ? '<span class="sf-stock">Agotado</span>' : `<span class="sf-stock">Stock ${p.stock}</span>`}</div>
+          <p class="sf-dtext">${sfEsc(p.description || '')}</p></div>
+        <footer class="sf-dfoot"><div data-step="${p.id}">${stepHTML(p)}</div></footer></section>`);
+    if (!embedded) { document.body.style.overflow = 'hidden'; try { history.pushState({ sfd: 1 }, ''); } catch { detail.pushed = false; } }
+    layer.querySelector('.sf-detail .sf-x').focus();
+  };
+  const closeDetail = fromPop => {
+    if (!detail) return; const d = detail; detail = null;
+    layer.querySelector('.sf-detail')?.remove(); layer.querySelector('.sf-scrim[data-close-detail]')?.remove();
+    if (!drawer && !lb && !embedded) document.body.style.overflow = '';
+    if (opener && opener.focus && opener.isConnected) opener.focus();
+    if (!fromPop && d.pushed) history.back();
+  };
+  const onPop = () => { if (!el.isConnected) return removeEventListener('popstate', onPop); if (detail) closeDetail(true); };
+  addEventListener('popstate', onPop);
+  let rt = 0; const onResize = () => { if (!el.isConnected) return removeEventListener('resize', onResize); clearTimeout(rt); rt = setTimeout(markMore, 150); };
+  addEventListener('resize', onResize);
+
   /* Obligatorios: nombre, teléfono, forma de entrega y, solo si es a domicilio, la dirección. El mensaje es opcional. */
   const validate = () => {
     const err = {};
@@ -197,13 +227,15 @@ function mountStore(el, init) {
     el.querySelectorAll('[data-step]').forEach(s => { const p = byId(+s.dataset.step); if (p) s.innerHTML = stepHTML(p); });
     drawBar(); drawLines();
   });
-  const drawAll = () => { cart.prune(); drawHero(); drawChips(); drawList(); drawBar(); drawLines(); applyView(); };
+  const drawAll = () => { cart.prune(); drawHero(); drawChips(); drawList(); drawBar(); drawLines(); applyView(); requestAnimationFrame(markMore); };
 
   /* ---------- Eventos ---------- */
   el.addEventListener('click', e => {
     const T = e.target, a = T.closest('[data-act]'), rm = T.closest('[data-rm]'), ch = T.closest('[data-chip]');
     const vm = T.closest('[data-vmode]');
-    if (vm) { vsaved = vm.dataset.vmode; try { VKEY && localStorage.setItem(VKEY, vsaved); } catch {} return applyView(); }
+    if (vm) { vsaved = vm.dataset.vmode; try { VKEY && localStorage.setItem(VKEY, vsaved); } catch {} applyView(); return requestAnimationFrame(markMore); }
+    const mo = T.closest('[data-more]'); if (mo) return openDetail(byId(+mo.dataset.more));
+    if (T.closest('[data-close-detail]')) return closeDetail();
     if (a) return cart.add(+a.dataset.id, a.dataset.act === 'inc' ? 1 : -1);
     if (rm) return cart.remove(+rm.dataset.rm);
     const hb = T.closest('[data-hours-toggle]');
@@ -240,11 +272,11 @@ function mountStore(el, init) {
   });
   el.addEventListener('scroll', sfGalleryScroll, true);
   document.addEventListener('keydown', e => {
-    if (!el.isConnected || (!drawer && !lb)) return;
-    if (e.key === 'Escape') return lb ? closeLightbox() : closeDrawer();
+    if (!el.isConnected || (!drawer && !lb && !detail)) return;
+    if (e.key === 'Escape') return lb ? closeLightbox() : detail ? closeDetail() : closeDrawer();
     if (lb) lb.key(e);
     if (e.key === 'Tab') {   // el foco no se escapa del diálogo abierto
-      const box = lb ? lb.el : layer.querySelector('.sf-drawer'), f = [...box.querySelectorAll('button:not([disabled]),input,textarea,[href]')].filter(x => !x.hidden && x.offsetParent !== null);
+      const box = lb ? lb.el : detail ? layer.querySelector('.sf-detail') : layer.querySelector('.sf-drawer'), f = [...box.querySelectorAll('button:not([disabled]),input,textarea,[href]')].filter(x => !x.hidden && x.offsetParent !== null);
       if (!f.length) return; const first = f[0], last = f[f.length - 1];
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
