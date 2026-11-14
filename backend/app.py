@@ -510,6 +510,8 @@ def resolve_images(c, sid, pid, images):
 def save_meta(c, pid, imgs):
     n, v = db.img_meta(imgs)
     c.execute("UPDATE products SET img_n=?, img_v=? WHERE id=?", (n, v, pid))
+    if n:
+        _warm_later(pid, v)
 
 @app.get("/api/products")
 def list_products(u=Depends(current_user)):
@@ -537,27 +539,92 @@ def _thumb(raw, mime, w):
     except Exception:
         return raw, mime
 
+_IMG_SLOTS = threading.Semaphore(3)           # a lo sumo 3 fotos procesándose a la vez: el resto espera y no agota las conexiones a la base
+_GEN_LOCKS, _GEN_LOCKS_L = {}, threading.Lock()
+_WARM_AT = {}
+
+def _gen_thumbs(pid, v):
+    """Lee las fotos del producto UNA vez y guarda todas sus miniaturas (160/320/640). Devuelve False si la versión ya cambió."""
+    with _GEN_LOCKS_L:
+        lock = _GEN_LOCKS.setdefault(pid, threading.Lock())
+    with lock, _IMG_SLOTS:
+        with db.conn() as c:
+            if c.execute("SELECT 1 FROM product_thumbs WHERE product_id=? AND v=? LIMIT 1", (pid, v)).fetchone():
+                return True                                    # otro pedido ya las generó mientras esperábamos
+            r = c.execute("SELECT images, img_v FROM products WHERE id=?", (pid,)).fetchone()
+        if not r or v != r["img_v"]:
+            return False
+        rows = []
+        for i, src in enumerate(parse_images(r["images"])[:5]):
+            m = re.match(r"^data:(image/[a-z]+);base64,(.+)$", src or "", re.S)
+            if not m:
+                continue
+            raw = base64.b64decode(m.group(2))
+            for w in _THUMB_W:
+                data, mime = _thumb(raw, m.group(1), w)
+                rows.append((pid, i, v, w, mime, base64.b64encode(data).decode()))
+        with db.conn() as c:
+            c.execute("DELETE FROM product_thumbs WHERE product_id=?", (pid,))
+            for row in rows:
+                c.execute("INSERT INTO product_thumbs(product_id,idx,v,w,mime,data) VALUES (?,?,?,?,?,?)", row)
+    return True
+
+def _warm_later(pid, v, delay=3):
+    """Prepara las miniaturas en segundo plano (después de guardar un producto), para que el primer visitante no las espere."""
+    def run():
+        try: _gen_thumbs(pid, v)
+        except Exception: pass
+    t = threading.Timer(delay, run); t.daemon = True; t.start()
+
+def _warm_store(sid):
+    """Al abrirse un catálogo: genera, de a uno, las miniaturas que falten. Como máximo una vez cada 10 minutos por comercio."""
+    if time.time() - _WARM_AT.get(sid, 0) < 600:
+        return
+    _WARM_AT[sid] = time.time()
+    def run():
+        try:
+            with db.conn() as c:
+                rows = c.execute("SELECT id, img_v FROM products WHERE store_id=? AND active=1 AND img_n>0 AND id NOT IN (SELECT product_id FROM product_thumbs) LIMIT 200", (sid,)).fetchall()
+            for r in rows:
+                _gen_thumbs(r["id"], r["img_v"])
+        except Exception:
+            pass
+    threading.Thread(target=run, daemon=True).start()
+
+_IMG_HEADERS = {"Cache-Control": "public, max-age=31536000, immutable"}
+
 @app.get("/api/img/{pid}/{i}")
 def product_image(pid: int, i: int, v: str = "", w: int = 0):
     """Foto de producto como archivo cacheable (la URL incluye la versión, así que el navegador la baja una sola vez).
-    w=160/320/640 pide una versión reducida: el catálogo no necesita decodificar fotos enormes en el celular."""
+    w=160/320/640 pide una versión reducida, guardada en la base (product_thumbs): no se vuelve a leer ni reescalar la foto original."""
     key = (pid, i, v, w)
-    hit = _THUMBS.get(key) if w else None
-    if not hit:
-        with db.conn() as c:
-            r = c.execute("SELECT images, img_v FROM products WHERE id=?", (pid,)).fetchone()
-        imgs = parse_images(r["images"]) if r else []
-        if not r or v != r["img_v"] or not 0 <= i < len(imgs):
-            raise HTTPException(404, "Imagen inexistente.")
-        m = re.match(r"^data:(image/[a-z]+);base64,(.+)$", imgs[i], re.S)
-        if not m:
-            raise HTTPException(404, "Imagen inexistente.")
-        hit = (base64.b64decode(m.group(2)), m.group(1))
-        if w in _THUMB_W:
-            hit = _thumb(hit[0], hit[1], w)
+    if w in _THUMB_W:
+        hit = _THUMBS.get(key)
+        if not hit:
+            def lookup():
+                with db.conn() as c:
+                    return c.execute("SELECT mime, data FROM product_thumbs WHERE product_id=? AND idx=? AND w=? AND v=?", (pid, i, w, v)).fetchone()
+            r = lookup()
+            if not r:
+                if not _gen_thumbs(pid, v):
+                    raise HTTPException(404, "Imagen inexistente.")
+                r = lookup()
+            if not r:
+                raise HTTPException(404, "Imagen inexistente.")
+            hit = (base64.b64decode(r["data"]), r["mime"])
             if len(_THUMBS) >= _THUMBS_MAX: _THUMBS.pop(next(iter(_THUMBS)), None)
             _THUMBS[key] = hit
-    return Response(hit[0], media_type=hit[1], headers={"Cache-Control": "public, max-age=31536000, immutable"})
+        return Response(hit[0], media_type=hit[1], headers=_IMG_HEADERS)
+    with _IMG_SLOTS:
+        with db.conn() as c:
+            r = c.execute("SELECT images, img_v FROM products WHERE id=?", (pid,)).fetchone()
+    imgs = parse_images(r["images"]) if r else []
+    if not r or v != r["img_v"] or not 0 <= i < len(imgs):
+        raise HTTPException(404, "Imagen inexistente.")
+    m = re.match(r"^data:(image/[a-z]+);base64,(.+)$", imgs[i], re.S)
+    if not m:
+        raise HTTPException(404, "Imagen inexistente.")
+    return Response(base64.b64decode(m.group(2)), media_type=m.group(1), headers=_IMG_HEADERS)
 
 @app.post("/api/products")
 def create_product(d: ProductIn, u=Depends(current_user)):
@@ -640,6 +707,7 @@ def public_catalog(slug: str):
         if not ob or not billing.allows(ob, "catalog"):
             raise HTTPException(404, "Este catálogo no está disponible por ahora.")      # dueño en plan gratis: el catálogo público se apaga
         prods = c.execute("SELECT id,name,description,price,stock,category,img_n,img_v FROM products WHERE store_id=? AND active=1 ORDER BY name COLLATE NOCASE", (s["id"],)).fetchall()
+    _warm_store(s["id"])
     return {"server_now": int(time.time() * 1000),        # hora del servidor: el navegador corrige un reloj mal puesto al calcular «Abierto ahora»
             "store": {"name": s["name"], "type": s["type"], "phone": s["phone"], "logo": s["logo"], "hours": hrs.parse_hours(s["hours"]), "theme": theme_view(parse_theme(s["theme"]), s["id"])},
             "products": [clean_product({**{k: v for k, v in dict(p).items() if k not in ("img_n", "img_v")}, "images": [img_url(p["id"], i, p["img_v"]) for i in range(p["img_n"])]}) for p in prods]}

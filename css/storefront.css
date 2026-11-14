@@ -391,3 +391,5 @@
 .sf-dfoot{padding:12px 16px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--soft)}
 @media(max-width:700px){.sf-detail{left:0;right:0;top:auto;bottom:0;width:100%;transform:none;max-height:88%;border-radius:18px 18px 0 0;animation:sfup .26s cubic-bezier(.2,.8,.2,1) both}}
 @keyframes sfup{from{transform:translateY(100%)}to{transform:none}}
+
+.sf-wake{text-align:center;color:var(--mu,#64748B);font-weight:600;padding:18px 16px}

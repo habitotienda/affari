@@ -89,6 +89,13 @@ Backend: `POST /api/sales/cart` (varios productos en una venta; una fila de caja
 - **Rutas del panel** (`js/app.js`): cada sección tiene su link (`/#/inicio`, `/#/caja`, `/#/productos` = Inventario, `/#/catalogo`, `/#/clientes`…). Al recargar se queda en la sección y el botón «atrás» del celular vuelve a la sección anterior del panel sin salirse de la app. Admite tildes (`/#/catálogo`) y subrutas (`/#/productos/12` abre Productos).
 - **Ver más** (`js/store/storefront.js`, `css/storefront.css`): si la descripción de un producto no entra en 2 líneas, aparece «Ver más» y abre una hoja con la descripción completa, foto, precio y el botón de agregar. En el catálogo público, «atrás» cierra la hoja en vez de salir de la página.
 
+## Fotos del catálogo: velocidad y fallas
+Causas encontradas: cada foto pedida leía de la base **todas** las fotos del producto (varios MB en base64) y las reescalaba, con la caché en memoria vacía cada vez que Render se dormía; además, con muchas fotos a la vez el pool de 10 conexiones se agotaba y esos pedidos fallaban al instante.
+- Tabla `product_thumbs` (en `schema.sql`, se crea sola): miniaturas 160/320/640 ya reducidas. La primera vez se leen las fotos **una sola vez** y se guardan todas; después cada foto es una lectura chica. Se preparan solas al guardar un producto y al abrirse el catálogo (`_warm_later`, `_warm_store` en `app.py`).
+- Máximo 3 fotos procesándose a la vez, y `database.py` ahora **espera** una conexión libre (hasta 25 s) en vez de fallar.
+- `js/public.js`: si el servidor está despertando reintenta solo con aviso, y guarda la última copia del catálogo en el navegador (se ve al instante). `js/store/utils.js`: las fotos que fallan se reintentan hasta 6 veces con espera creciente.
+- Render gratis se duerme a los 15 min sin visitas y el cron de GitHub puede demorarse más que eso: conviene sumar un monitor externo gratuito (UptimeRobot o cron-job.org) que haga GET a `/ping` cada 5 minutos.
+
 ## Estructura
 ```
 backend/

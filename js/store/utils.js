@@ -64,11 +64,11 @@ function sfContrast(a, b) {
   const x = L(a), y = L(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
 }
 
-/* Fotos que no cargan (servidor dormido, red lenta, pedidos en paralelo): se reintentan solas hasta 4 veces con espera creciente,
+/* Fotos que no cargan (servidor dormido, red lenta, pedidos en paralelo): se reintentan solas hasta 6 veces con espera creciente,
    y también al volver la conexión. Sirve para el catálogo, el panel de productos y el visor. */
 (() => {
   if (window.__sfImgRetry) return; window.__sfImgRetry = true;
-  const MAX = 4, bust = (u, n) => u.replace(/([?&])_r=\d+&?/, '$1').replace(/[?&]$/, '') + (u.includes('?') ? '&' : '?') + '_r=' + n;
+  const MAX = 6, bust = (u, n) => u.replace(/([?&])_r=\d+&?/, '$1').replace(/[?&]$/, '') + (u.includes('?') ? '&' : '?') + '_r=' + n;
   const failed = new Set();
   const retry = (img, n) => {
     if (!img.isConnected) return failed.delete(img);
@@ -80,7 +80,7 @@ function sfContrast(a, b) {
     img.dataset.src0 = src;
     const n = +(img.dataset.rt || 0) + 1; img.dataset.rt = n;
     if (n > MAX) { img.classList.add('sf-broken'); failed.add(img); return; }
-    setTimeout(() => navigator.onLine === false ? failed.add(img) : retry(img, n), 600 * 2 ** (n - 1));
+    setTimeout(() => navigator.onLine === false ? failed.add(img) : retry(img, n), Math.min(600 * 2 ** (n - 1), 6000) + Math.random() * 400);   // con un poco de azar para que no vuelvan todas juntas
   }, true);
   document.addEventListener('load', e => { const img = e.target; if (img instanceof HTMLImageElement && img.dataset.rt) { delete img.dataset.rt; img.classList.remove('sf-broken'); failed.delete(img); } }, true);
   addEventListener('online', () => failed.forEach(img => { img.dataset.rt = 1; img.classList.remove('sf-broken'); retry(img, 1); }));

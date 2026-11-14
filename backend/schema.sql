@@ -153,3 +153,14 @@ CREATE TABLE IF NOT EXISTS payments (
   amount REAL NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
+
+-- Miniaturas de fotos de producto ya reducidas (base64). Evita leer y reescalar fotos enormes en cada pedido, también después de que Render se duerme.
+CREATE TABLE IF NOT EXISTS product_thumbs (
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  idx INTEGER NOT NULL,
+  v TEXT NOT NULL,
+  w INTEGER NOT NULL,
+  mime TEXT NOT NULL,
+  data TEXT NOT NULL,
+  PRIMARY KEY (product_id, idx, w)
+);

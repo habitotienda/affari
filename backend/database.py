@@ -102,15 +102,27 @@ def _make_pool():
                     "'Session pooler' (host *.pooler.supabase.com, usuario postgres.<ref>) y ponela en DATABASE_URL." % str(e).strip()) from e
     return _pool
 
+def _getconn(pool, wait=25.0):
+    """Con muchos pedidos a la vez (p. ej. las fotos de un catálogo) el pool se agota: antes el pedido fallaba al instante; ahora espera su turno."""
+    import psycopg2.pool
+    t0 = time.time()
+    while True:
+        try:
+            return pool.getconn()
+        except psycopg2.pool.PoolError:
+            if time.time() - t0 > wait:
+                raise
+            time.sleep(0.05)
+
 def _pg_checkout():
     pool = _make_pool()
-    raw = pool.getconn()
+    raw = _getconn(pool)
     if raw.closed or (time.time() - _last_used.get(id(raw), 0) > 45):      # conexión posiblemente cortada por inactividad
         try:
             cur = raw.cursor(); cur.execute("SELECT 1"); cur.close(); raw.rollback()
         except Exception:
             pool.putconn(raw, close=True)
-            raw = pool.getconn()
+            raw = _getconn(pool)
     return pool, raw
 
 @contextmanager
