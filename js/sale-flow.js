@@ -16,17 +16,18 @@
       else rows.push({ key: `${p.id}:0`, pid: p.id, vid: null, name: p.name, price: p.price, stock: p.stock, img: p.images && p.images[0] });
     });
     const S = { step: 1, q: '', cart: new Map(), paid: true, method: 'Efectivo', dtype: '%', dval: 0, client: null, concept: '', note: '', receipt: null, busy: false };
+    const thumb = x => `<div class="sv-th">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : esc((x.name[0] || '?').toUpperCase())}</div>`;
     const sub = () => [...S.cart.values()].reduce((a, i) => a + i.qty * i.price, 0);
     const disc = () => n2(Math.min(sub(), S.dtype === '%' ? sub() * Math.min(S.dval, 100) / 100 : S.dval));
     const total = () => n2(sub() - disc());
     const units = () => [...S.cart.values()].reduce((a, i) => a + i.qty, 0);
 
-    const ov = document.createElement('div'); ov.className = 'sf';
-    ov.innerHTML = `<div class="sf-box" role="dialog" aria-modal="true" aria-label="Nueva venta"><header class="sf-head"><button type="button" class="icon-btn" data-back aria-label="Volver"></button><h2 data-ttl></h2><button type="button" class="icon-btn" data-x aria-label="Cerrar">${icon('close')}</button></header>
-      <div class="sf-prog" data-prog></div><div class="sf-body" data-body></div><div class="sf-foot" data-foot></div></div>`;
+    const ov = document.createElement('div'); ov.className = 'sv';
+    ov.innerHTML = `<div class="sv-box" role="dialog" aria-modal="true" aria-label="Nueva venta"><header class="sv-head"><button type="button" class="icon-btn" data-back aria-label="Volver"></button><h2 data-ttl></h2><button type="button" class="icon-btn" data-x aria-label="Cerrar">${icon('close')}</button></header>
+      <div class="sv-prog" data-prog></div><div class="sv-body" data-body></div><div class="sv-foot" data-foot></div></div>`;
     document.body.appendChild(ov);
     const $ = s => ov.querySelector(s), body = $('[data-body]');
-    const onKey = e => { if (e.key === 'Escape' && !ov.querySelector('.sf-sheet')) close(); };
+    const onKey = e => { if (e.key === 'Escape' && !ov.querySelector('.sv-sheet')) close(); };
     document.addEventListener('keydown', onKey);
     const close = () => { document.removeEventListener('keydown', onKey); ov.remove(); if (S.receipt) refresh(); };
     $('[data-x]').onclick = close;
@@ -43,9 +44,9 @@
       const q = S.q.trim().toLowerCase(), list = body.querySelector('[data-list]'); if (!list) return;
       const r = rows.filter(x => !q || x.name.toLowerCase().includes(q));
       list.innerHTML = r.map(x => { const it = S.cart.get(x.key);
-        return `<div class="sf-item ${it ? 'sel' : ''}"><div class="sf-th">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : esc((x.name[0] || '?').toUpperCase())}</div>
-        <div class="sf-info"><strong>${esc(x.name)}</strong><span class="sf-tag">${x.stock} disponibles</span><b>${ars(x.price)}</b></div>
-        <div class="sf-stp"><button type="button" data-m="${x.key}" aria-label="Quitar uno">−</button><b>${it ? it.qty : 0}</b><button type="button" data-p="${x.key}" aria-label="Agregar uno">+</button></div></div>`; }).join('')
+        return `<div class="sv-item ${it ? 'sel' : ''}">${thumb(x)}
+        <div class="sv-info"><strong>${esc(x.name)}</strong><span class="sv-tag">${x.stock} disponibles</span><b>${ars(x.price)}</b></div>
+        <div class="sv-stp"><button type="button" data-m="${x.key}" aria-label="Quitar uno">−</button><b>${it ? it.qty : 0}</b><button type="button" data-p="${x.key}" aria-label="Agregar uno">+</button></div></div>`; }).join('')
         || `<div class="empty">${rows.length ? 'No hay productos con ese nombre.' : 'No tenés productos con stock. Cargalos en Inventario.'}</div>`;
     }
 
@@ -56,17 +57,17 @@
       $('[data-back]').style.visibility = S.step > 1 && S.step < 4 ? '' : 'hidden';
       $('[data-prog]').innerHTML = [1, 2, 3, 4].map(i => `<i class="${i <= S.step ? 'on' : ''}"></i>`).join('');
       if (S.step === 1) {
-        body.innerHTML = `<input class="sf-in" type="search" data-q placeholder="Buscar producto…" aria-label="Buscar producto" value="${esc(S.q)}"><div data-list></div>`;
+        body.innerHTML = `<input class="sv-in" type="search" data-q placeholder="Buscar producto…" aria-label="Buscar producto" value="${esc(S.q)}"><div data-list></div>`;
         const q = body.querySelector('[data-q]'); q.oninput = () => { S.q = q.value; drawList(); };
         body.querySelector('[data-list]').onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.p) setQty(b.dataset.p, 1); if (b.dataset.m) setQty(b.dataset.m, -1); };
         drawList();
       }
       if (S.step === 2) {
-        body.innerHTML = [...S.cart.values()].map(i => `<div class="sf-item col"><div class="sf-r"><strong>${esc(i.name)}</strong><button type="button" class="btn btn-sm btn-danger" data-rm="${i.key}">Quitar</button></div>
-          <div class="sf-r"><div class="sf-stp"><button type="button" data-m="${i.key}" aria-label="Quitar uno">−</button><b>${i.qty}</b><button type="button" data-p="${i.key}" aria-label="Agregar uno">+</button></div>
-          <label class="sf-price">$<input class="sf-in" type="number" min="0" step="any" inputmode="decimal" value="${i.price}" data-pr="${i.key}" aria-label="Precio unitario"></label></div>
+        body.innerHTML = [...S.cart.values()].map(i => `<div class="sv-item col"><div class="sv-r">${thumb(i)}<strong class="sv-nm">${esc(i.name)}</strong><button type="button" class="btn btn-sm btn-danger" data-rm="${i.key}">Quitar</button></div>
+          <div class="sv-r"><div class="sv-stp"><button type="button" data-m="${i.key}" aria-label="Quitar uno">−</button><b>${i.qty}</b><button type="button" data-p="${i.key}" aria-label="Agregar uno">+</button></div>
+          <label class="sv-price">$<input class="sv-in" type="number" min="0" step="any" inputmode="decimal" value="${i.price}" data-pr="${i.key}" aria-label="Precio unitario"></label></div>
           <small class="muted">${i.qty} × ${ars(i.price)} = <b data-line="${i.key}">${ars(i.qty * i.price)}</b></small></div>`).join('')
-          + `<button type="button" class="btn btn-block" data-more>${icon('plus')}Agregar más productos</button><p class="muted sf-hint">Al crear la venta se descuentan las unidades de tu inventario.</p>`;
+          + `<button type="button" class="btn btn-block" data-more>${icon('plus')}Agregar más productos</button><p class="muted sv-hint">Al crear la venta se descuentan las unidades de tu inventario.</p>`;
         body.onclick = e => { const b = e.target.closest('button'); if (!b) return;
           if (b.dataset.p) setQty(b.dataset.p, 1); if (b.dataset.m) setQty(b.dataset.m, -1);
           if (b.dataset.rm) { S.cart.delete(b.dataset.rm); S.cart.size ? render() : (S.step = 1, render()); }
@@ -75,14 +76,14 @@
       }
       if (S.step === 3) {
         const cl = S.client;
-        body.innerHTML = `<div class="sf-seg"><button type="button" class="${S.paid ? 'on' : ''}" data-paid="1">Pagado</button><button type="button" class="${S.paid ? '' : 'on'}" data-paid="0">Deuda (fiado)</button></div>
-          ${S.paid ? `<div class="sf-lab">Forma de pago</div><div class="sf-chips">${PAY.map(m => `<button type="button" class="${S.method === m ? 'on' : ''}" data-m="${m}">${m}</button>`).join('')}</div>` : '<p class="muted sf-hint">Queda anotada como deuda del cliente y no entra a caja hasta que cobres.</p>'}
-          <div class="sf-lab">Descuento</div><div class="sf-r"><div class="sf-seg sm"><button type="button" class="${S.dtype === '%' ? 'on' : ''}" data-dt="%">%</button><button type="button" class="${S.dtype === '$' ? 'on' : ''}" data-dt="$">$</button></div>
-          <input class="sf-in" type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="${S.dval || ''}" data-dv aria-label="Descuento"></div>
-          <div class="sf-lab">Cliente${S.paid ? ' (opcional)' : ''}</div><button type="button" class="sf-pick" data-cl>${cl ? `<strong>${esc(cl.name)}</strong>${cl.phone ? ` <span class="muted">· ${esc(cl.phone)}</span>` : ''}` : '<span class="muted">Elegir o agregar cliente</span>'}<span>▾</span></button>
-          <div class="sf-lab">Concepto</div><input class="sf-in" data-cc maxlength="120" placeholder="Dale un nombre a tu venta" value="${esc(S.concept)}">
-          <div class="sf-lab">Nota en el comprobante</div><textarea class="sf-in" rows="3" data-nt maxlength="300" placeholder="Agregar nota…">${esc(S.note)}</textarea>
-          <div class="sf-sum" data-sum></div>`;
+        body.innerHTML = `<div class="sv-seg"><button type="button" class="${S.paid ? 'on' : ''}" data-paid="1">Pagado</button><button type="button" class="${S.paid ? '' : 'on'}" data-paid="0">Deuda (fiado)</button></div>
+          ${S.paid ? `<div class="sv-lab">Forma de pago</div><div class="sv-chips">${PAY.map(m => `<button type="button" class="${S.method === m ? 'on' : ''}" data-m="${m}">${m}</button>`).join('')}</div>` : '<p class="muted sv-hint">Queda anotada como deuda del cliente y no entra a caja hasta que cobres.</p>'}
+          <div class="sv-lab">Descuento</div><div class="sv-r"><div class="sv-seg sm"><button type="button" class="${S.dtype === '%' ? 'on' : ''}" data-dt="%">%</button><button type="button" class="${S.dtype === '$' ? 'on' : ''}" data-dt="$">$</button></div>
+          <input class="sv-in" type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="${S.dval || ''}" data-dv aria-label="Descuento"></div>
+          <div class="sv-lab">Cliente${S.paid ? ' (opcional)' : ''}</div><button type="button" class="sv-pick" data-cl>${cl ? `<strong>${esc(cl.name)}</strong>${cl.phone ? ` <span class="muted">· ${esc(cl.phone)}</span>` : ''}` : '<span class="muted">Elegir o agregar cliente</span>'}<span>▾</span></button>
+          <div class="sv-lab">Concepto</div><input class="sv-in" data-cc maxlength="120" placeholder="Dale un nombre a tu venta" value="${esc(S.concept)}">
+          <div class="sv-lab">Nota en el comprobante</div><textarea class="sv-in" rows="3" data-nt maxlength="300" placeholder="Agregar nota…">${esc(S.note)}</textarea>
+          <div class="sv-sum" data-sum></div>`;
         sum();
         body.onclick = e => { const b = e.target.closest('button'); if (!b) return;
           if (b.dataset.paid) { S.paid = b.dataset.paid === '1'; render(); }
@@ -101,8 +102,8 @@
       const f = $('[data-foot]');
       if (S.step === 4) { f.innerHTML = `<button type="button" class="btn btn-primary btn-block" data-new>Nueva venta</button>`; f.querySelector('[data-new]').onclick = () => { ov.remove(); document.removeEventListener('keydown', onKey); refresh(); openSaleFlow(); }; return; }
       const lab = { 1: 'Ver resumen', 2: 'Continuar al pago', 3: S.paid ? 'Crear venta' : 'Anotar deuda' }[S.step];
-      f.innerHTML = `<button type="button" class="sf-go" ${S.cart.size && !S.busy ? '' : 'disabled'}><span>${units()} · ${lab}</span><span>${ars(total())} ›</span></button>`;
-      f.querySelector('.sf-go').onclick = () => S.step < 3 ? (S.step++, render(), body.scrollTo(0, 0)) : create();
+      f.innerHTML = `<button type="button" class="sv-go" ${S.cart.size && !S.busy ? '' : 'disabled'}><span>${units()} · ${lab}</span><span>${ars(total())} ›</span></button>`;
+      f.querySelector('.sv-go').onclick = () => S.step < 3 ? (S.step++, render(), body.scrollTo(0, 0)) : create();
     }
 
     async function create() {
@@ -121,16 +122,16 @@
 
     /* ---- selector de cliente ---- */
     function pickClient() {
-      const sh = document.createElement('div'); sh.className = 'sf-sheet';
-      sh.innerHTML = `<div class="sf-sheet-box"><div class="sf-r"><h3>Cliente</h3><button type="button" class="icon-btn" data-sx aria-label="Cerrar">${icon('close')}</button></div>
-        <input class="sf-in" type="search" data-sq placeholder="Buscar cliente…"><div class="sf-clist" data-cl></div>
-        <div class="sf-lab">Agregar manualmente</div><input class="sf-in" data-nn placeholder="Nombre" maxlength="100"><input class="sf-in" data-np type="tel" inputmode="tel" placeholder="WhatsApp (ej. 351 555 0123)${S.paid ? ' · opcional' : ''}" style="margin-top:8px">
-        <div class="sf-r" style="margin-top:10px"><button type="button" class="btn" data-imp style="flex:1">Importar de contactos</button><button type="button" class="btn btn-primary" data-add style="flex:1">Usar cliente</button></div>
+      const sh = document.createElement('div'); sh.className = 'sv-sheet';
+      sh.innerHTML = `<div class="sv-sheet-box"><div class="sv-r"><h3>Cliente</h3><button type="button" class="icon-btn" data-sx aria-label="Cerrar">${icon('close')}</button></div>
+        <input class="sv-in" type="search" data-sq placeholder="Buscar cliente…"><div class="sv-clist" data-cl></div>
+        <div class="sv-lab">Agregar manualmente</div><input class="sv-in" data-nn placeholder="Nombre" maxlength="100"><input class="sv-in" data-np type="tel" inputmode="tel" placeholder="WhatsApp (ej. 351 555 0123)${S.paid ? ' · opcional' : ''}" style="margin-top:8px">
+        <div class="sv-r" style="margin-top:10px"><button type="button" class="btn" data-imp style="flex:1">Importar de contactos</button><button type="button" class="btn btn-primary" data-add style="flex:1">Usar cliente</button></div>
         ${S.client ? '<button type="button" class="btn btn-block" data-none>Quitar cliente</button>' : ''}</div>`;
       ov.appendChild(sh);
       const done = c => { S.client = c; sh.remove(); render(); };
       const list = () => { const q = sh.querySelector('[data-sq]').value.trim().toLowerCase();
-        sh.querySelector('[data-cl]').innerHTML = clients.filter(c => !q || c.name.toLowerCase().includes(q)).slice(0, 40).map(c => `<button type="button" class="sf-c" data-id="${c.id}">${esc(c.name)} <span class="muted">${esc(c.phone || '')}</span>${c.balance > 0 ? ` <span class="sf-debt">debe ${ars(c.balance)}</span>` : ''}</button>`).join('') || '<p class="muted">Sin coincidencias.</p>'; };
+        sh.querySelector('[data-cl]').innerHTML = clients.filter(c => !q || c.name.toLowerCase().includes(q)).slice(0, 40).map(c => `<button type="button" class="sv-c" data-id="${c.id}">${esc(c.name)} <span class="muted">${esc(c.phone || '')}</span>${c.balance > 0 ? ` <span class="sv-debt">debe ${ars(c.balance)}</span>` : ''}</button>`).join('') || '<p class="muted">Sin coincidencias.</p>'; };
       list();
       sh.querySelector('[data-sq]').oninput = list;
       sh.querySelector('[data-cl]').onclick = e => { const b = e.target.closest('[data-id]'); if (b) done(clients.find(c => c.id == b.dataset.id)); };
@@ -153,19 +154,29 @@
     /* ---- comprobante ---- */
     function drawReceipt() {
       const r = S.receipt;
-      body.innerHTML = `<div class="sf-rc"><img data-img alt="Comprobante N.º ${r.number}"></div>
-        <p class="muted sf-hint">Compartilo como imagen por WhatsApp o guardalo en tu teléfono.</p>
-        <div class="sf-acts"><button type="button" class="btn btn-primary" data-share>Compartir</button><button type="button" class="btn btn-wa" data-wa>WhatsApp</button><button type="button" class="btn" data-dl>${icon('download', 16)}Guardar</button></div>`;
+      body.innerHTML = `<div class="sv-rc"><img data-img alt="Comprobante N.º ${r.number}"></div>
+        <p class="muted sv-hint">Compartilo como imagen por WhatsApp o guardalo en tu teléfono.</p>
+        <div class="sv-acts"><button type="button" class="btn btn-primary" data-share>Compartir</button><button type="button" class="btn btn-wa" data-wa>WhatsApp</button><button type="button" class="btn" data-dl>${icon('download', 16)}Guardar</button></div>`;
       const cv = receiptCanvas(r); body.querySelector('[data-img]').src = cv.toDataURL('image/png');
-      const blob = () => new Promise(ok => cv.toBlob(ok, 'image/png')), fname = `comprobante-${r.number}.png`, text = receiptText(r);
-      body.querySelector('[data-dl]').onclick = async () => { const a = document.createElement('a'); a.href = URL.createObjectURL(await blob()); a.download = fname; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
+      const fname = `comprobante-${r.number}.png`, caption = `${r.business} · Comprobante N.º ${r.number} · Total ${ars(r.total)}`;
+      /* El archivo se genera de antemano: navigator.share exige que se llame justo al tocar el botón (sin esperas async antes) */
+      let file = null; cv.toBlob(b => { if (b) file = new File([b], fname, { type: 'image/png' }); }, 'image/png');
+      const canShareFile = () => !!(file && navigator.canShare && navigator.share && navigator.canShare({ files: [file] }));
+      const save = () => { if (!file) return; const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = fname; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
+      body.querySelector('[data-dl]').onclick = save;
       body.querySelector('[data-share]').onclick = async () => {
-        const f = new File([await blob()], fname, { type: 'image/png' });
-        try { if (navigator.canShare && navigator.canShare({ files: [f] })) await navigator.share({ files: [f], title: `Comprobante ${r.number}`, text: `${r.business} · Total ${ars(r.total)}` }); else if (navigator.share) await navigator.share({ title: `Comprobante ${r.number}`, text }); else body.querySelector('[data-dl]').click(); } catch {} };
-      body.querySelector('[data-wa]').onclick = () => { const ph = r.client && r.client.phone ? waNum(r.client.phone) : ''; window.open(`https://wa.me/${ph}?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); };
+        if (!canShareFile()) return save();
+        try { await navigator.share({ files: [file], title: `Comprobante ${r.number}`, text: caption }); } catch {} };
+      /* WhatsApp: en el celular abre la hoja de compartir con la IMAGEN; en la compu (wa.me no admite adjuntos) copia la imagen y abre el chat para pegarla */
+      body.querySelector('[data-wa]').onclick = async () => {
+        if (canShareFile()) { try { await navigator.share({ files: [file], title: `Comprobante ${r.number}`, text: caption }); } catch {} return; }
+        let copied = false;
+        try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': file })]); copied = true; } catch {}
+        if (!copied) save();
+        const ph = r.client && r.client.phone ? waNum(r.client.phone) : '';
+        window.open(`https://wa.me/${ph}`, '_blank', 'noopener');
+        toast(copied ? 'Imagen copiada: pegala en el chat de WhatsApp (Ctrl+V)' : 'Imagen guardada: adjuntala en el chat de WhatsApp'); };
     }
-    const receiptText = r => `*${r.business}* · Comprobante N.º ${r.number}\n${r.date}\n${r.client ? 'Cliente: ' + r.client.name + '\n' : ''}${r.concept ? r.concept + '\n' : ''}\n` + r.items.map(i => `• ${i.qty} × ${i.name} — ${ars(i.qty * i.unit)}`).join('\n')
-      + `\n\nSubtotal: ${ars(r.subtotal)}${r.discount ? '\nDescuento: − ' + ars(r.discount) : ''}\n*Total: ${ars(r.total)}*\n${r.paid ? 'Pagado con ' + r.method : 'Pendiente de pago'}${r.note ? '\n\n' + r.note : ''}\n\n¡Gracias por tu compra!`;
 
     render();
   }

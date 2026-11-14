@@ -98,6 +98,7 @@ function mountStore(el, init) {
     $('[data-chips]').innerHTML = cats.length ? ['', ...cats].map(c => `<button type="button" class="sf-chip${c === cat ? ' on' : ''}" data-chip="${sfEsc(c)}">${c ? sfEsc(c) : 'Todos'}</button>`).join('') : '';
   };
   const nf = () => (flt.sort ? 1 : 0) + (flt.min !== '' ? 1 : 0) + (flt.max !== '' ? 1 : 0) + (flt.stock ? 1 : 0);
+  let lazyIO = null;
   const drawList = () => {
     const term = q.value.trim().toLowerCase(), mn = flt.min === '' ? 0 : +flt.min, mx = flt.max === '' ? Infinity : +flt.max;
     let items = live().filter(p => (!cat || p.category === cat) && (p.name + ' ' + (p.description || '') + ' ' + (p.category || '')).toLowerCase().includes(term)
@@ -107,6 +108,7 @@ function mountStore(el, init) {
     const n = nf(), fc = $('[data-fcount]'); fc.hidden = !n; fc.textContent = n;
     $('[data-meta]').textContent = items.length ? `${items.length} ${items.length === 1 ? 'producto' : 'productos'}${cat ? ' en ' + cat : ''}` : '';
     $('[data-list]').innerHTML = items.length ? items.map(card).join('') : `<div class="sf-empty">No hay productos para mostrar.${n || term || cat ? '<br><button type="button" class="sf-link" data-reset>Quitar filtros y búsqueda</button>' : ''}</div>`;
+    if (lazyIO) lazyIO.disconnect(); lazyIO = sfLazyCards(el.querySelectorAll('[data-list] .sf-card'), embedded ? $('.sf') : null);
   };
 
   /* Barra flotante + insignia del botón del carrito */

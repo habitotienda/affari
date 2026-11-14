@@ -8,14 +8,30 @@ function sfGallery(p) {
   /* Solo la primera foto se descarga al dibujar la tarjeta. Las demás (y las miniaturas) esperan a que el visitante toque
      o pase el mouse por la galería (sfHydrate). Con 150 productos × 5 fotos, bajarlas todas llenaba la memoria del celular y lo congelaba. */
   return `<div class="sf-slides" data-zoom="${p.id}" tabindex="0" role="group" aria-label="Fotos de ${sfEsc(p.name)}">${imgs.map((s, i) =>
-      `<img ${i ? 'data-src' : 'src'}="${sfEsc(sfThumb(s, 640))}" alt="${sfEsc(p.name)} (foto ${i + 1} de ${imgs.length})" ${i ? '' : 'loading="lazy" '}decoding="async">`).join('')}</div>`
+      `<img ${i ? 'data-src' : 'data-first'}="${sfEsc(sfThumb(s, 640))}" alt="${sfEsc(p.name)} (foto ${i + 1} de ${imgs.length})" decoding="async">`).join('')}</div>`
     + (many ? `<button type="button" class="sf-arrow l" data-slide="-1" aria-label="Foto anterior">${SF_ICON.prev}</button><button type="button" class="sf-arrow r" data-slide="1" aria-label="Foto siguiente">${SF_ICON.next}</button>
       <div class="sf-thumbs">${imgs.map((s, i) => `<button type="button" data-th="${i}" class="${i ? '' : 'on'}" aria-label="Ver foto ${i + 1}"><img data-src="${sfEsc(sfThumb(s, 160))}" alt="" decoding="async"></button>`).join('')}</div>` : '');
+}
+
+/* Foto principal de cada tarjeta: se descarga cuando la tarjeta está a menos de ~2 pantallas de distancia (no con el loading="lazy" nativo,
+   que con scroll rápido y content-visibility llega tarde y deja las fotos en blanco). (Los reintentos por error ya los maneja utils.js). */
+function sfFirstLoad(card) {
+  card.querySelectorAll('img[data-first]').forEach(im => {
+    im.src = im.dataset.first; im.removeAttribute('data-first');
+  });
+}
+function sfLazyCards(cards, root) {
+  cards = [...cards];
+  if (!('IntersectionObserver' in window)) { cards.forEach(sfFirstLoad); return null; }
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { sfFirstLoad(e.target); io.unobserve(e.target); } }), { root: root || null, rootMargin: '1800px 0px' });
+  cards.forEach(c => io.observe(c));
+  return io;
 }
 
 /* Descarga las fotos pendientes de una galería (una sola vez) */
 function sfHydrate(gal) {
   if (!gal || gal.dataset.h) return; gal.dataset.h = '1';
+  const c = gal.closest('.sf-card'); if (c) sfFirstLoad(c);
   gal.querySelectorAll('img[data-src]').forEach(im => { im.src = im.dataset.src; im.removeAttribute('data-src'); });
 }
 

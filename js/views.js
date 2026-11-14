@@ -441,6 +441,10 @@ const VIEWS = {
     fitPreview();
     drawLogo();
     el.querySelector('[data-new]').onclick = () => openProductModal(); el.querySelector('[data-copy]').onclick = () => copyText(url);
+    /* App instalada (PWA): un enlace con target=_blank dentro del alcance abre una ventana nueva SIN historial, y «atrás» cierra la app.
+       Navegando en la misma ventana, «atrás» vuelve a #/catalogo. En el navegador común sigue abriendo otra pestaña. */
+    const openStore = el.querySelector('.share a[href]');
+    if (openStore) openStore.onclick = e => { if (matchMedia('(display-mode: standalone)').matches || navigator.standalone === true) { e.preventDefault(); location.href = url; } };
     el.querySelector('[data-qr]').onclick = () => openModal({ title: 'Código QR del catálogo', hideSubmit: true, html: `<div class="qr"><img src="/api/public/${u.slug}/qr.svg" alt="Código QR del catálogo"><code>${esc(url)}</code>
       <div class="qr-actions"><a class="btn" download="affari-catalogo-qr.svg" href="/api/public/${u.slug}/qr.svg">Descargar QR</a><a class="btn btn-primary" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(`Mirá el catálogo de ${u.business}: ${url}`)}">${icon('whatsapp', 16)}Compartir por WhatsApp</a></div></div>` });
     el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openProductModal(ps.find(p => p.id == b.dataset.edit)));
