@@ -12,8 +12,8 @@
     try { [products, clients] = await Promise.all([api('/products'), api('/clients')]); } catch (e) { return toast(e.message); }
     const rows = [];
     products.filter(p => p.active && p.stock > 0).forEach(p => {
-      if (p.variants && p.variants.length) p.variants.filter(v => v.stock > 0).forEach(v => rows.push({ key: `${p.id}:${v.id}`, pid: p.id, vid: v.id, name: `${p.name} · ${v.name}`, price: v.price || p.price, stock: v.stock, img: p.images && p.images[0] }));
-      else rows.push({ key: `${p.id}:0`, pid: p.id, vid: null, name: p.name, price: p.price, stock: p.stock, img: p.images && p.images[0] });
+      if (p.variants && p.variants.length) p.variants.filter(v => v.stock > 0).forEach(v => rows.push({ key: `${p.id}:${v.id}`, pid: p.id, vid: v.id, name: `${p.name} · ${v.name}`, price: v.price || p.price, cost: v.cost || p.cost || 0, stock: v.stock, img: p.images && p.images[0] }));
+      else rows.push({ key: `${p.id}:0`, pid: p.id, vid: null, name: p.name, price: p.price, cost: p.cost || 0, stock: p.stock, img: p.images && p.images[0] });
     });
     const todayStr = () => { const d = new Date(), z = k => String(k).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
     const S = { step: 1, date: todayStr(), q: '', cart: new Map(), paid: true, method: 'Efectivo', dtype: '%', dval: 0, client: null, concept: '', note: '', receipt: null, busy: false };
@@ -21,6 +21,9 @@
     const sub = () => [...S.cart.values()].reduce((a, i) => a + i.qty * i.price, 0);
     const disc = () => n2(Math.min(sub(), S.dtype === '%' ? sub() * Math.min(S.dval, 100) / 100 : S.dval));
     const total = () => n2(sub() - disc());
+    const cost = () => [...S.cart.values()].reduce((a, i) => a + i.qty * (i.cost || 0), 0);
+    const profit = () => n2(total() - cost());
+    const noCost = () => [...S.cart.values()].some(i => !i.cost);
     const units = () => [...S.cart.values()].reduce((a, i) => a + i.qty, 0);
 
     const ov = document.createElement('div'); ov.className = 'sv';
@@ -105,7 +108,7 @@
       if (S.step === 4) drawReceipt();
       foot();
     }
-    function sum() { const e = body.querySelector('[data-sum]'); if (e) e.innerHTML = `<div><span>Subtotal</span><span>${ars(sub())}</span></div><div><span>Descuento</span><span>− ${ars(disc())}</span></div><div class="t"><span>Total</span><span>${ars(total())}</span></div>`; }
+    function sum() { const e = body.querySelector('[data-sum]'); if (e) { const g = profit(); e.innerHTML = `<div><span>Subtotal</span><span>${ars(sub())}</span></div><div><span>Descuento</span><span>− ${ars(disc())}</span></div><div class="t"><span>Total</span><span>${ars(total())}</span></div><div class="g ${g < 0 ? 'neg' : ''}"><span>Ganancia</span><span>${g < 0 ? '− ' + ars(-g) : ars(g)}</span></div>${noCost() ? '<small class="muted">Hay productos sin costo cargado: la ganancia puede ser mayor a la real.</small>' : ''}`; } }
     function foot() {
       const f = $('[data-foot]');
       if (S.step === 4) { f.innerHTML = `<button type="button" class="btn btn-primary btn-block" data-new>Nueva venta</button>`; f.querySelector('[data-new]').onclick = () => { ov.remove(); document.removeEventListener('keydown', onKey); Back.release(bh); refresh(); openSaleFlow(); }; return; }
