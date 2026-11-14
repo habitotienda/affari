@@ -5,15 +5,23 @@ function sfGallery(p) {
   const imgs = (p.images || []).slice(0, SF_MAX_IMG);
   if (!imgs.length) return `<div class="sf-noimg">${sfEsc((p.name[0] || '?').toUpperCase())}</div>`;
   const many = imgs.length > 1;
+  /* Solo la primera foto se descarga al dibujar la tarjeta. Las demás (y las miniaturas) esperan a que el visitante toque
+     o pase el mouse por la galería (sfHydrate). Con 150 productos × 5 fotos, bajarlas todas llenaba la memoria del celular y lo congelaba. */
   return `<div class="sf-slides" data-zoom="${p.id}" tabindex="0" role="group" aria-label="Fotos de ${sfEsc(p.name)}">${imgs.map((s, i) =>
-      `<img src="${sfEsc(s)}" alt="${sfEsc(p.name)} (foto ${i + 1} de ${imgs.length})" loading="lazy" decoding="async">`).join('')}</div>`
+      `<img ${i ? 'data-src' : 'src'}="${sfEsc(s)}" alt="${sfEsc(p.name)} (foto ${i + 1} de ${imgs.length})" ${i ? '' : 'loading="lazy" '}decoding="async">`).join('')}</div>`
     + (many ? `<button type="button" class="sf-arrow l" data-slide="-1" aria-label="Foto anterior">${SF_ICON.prev}</button><button type="button" class="sf-arrow r" data-slide="1" aria-label="Foto siguiente">${SF_ICON.next}</button>
-      <div class="sf-thumbs">${imgs.map((s, i) => `<button type="button" data-th="${i}" class="${i ? '' : 'on'}" aria-label="Ver foto ${i + 1}"><img src="${sfEsc(s)}" alt="" loading="lazy" decoding="async"></button>`).join('')}</div>` : '');
+      <div class="sf-thumbs">${imgs.map((s, i) => `<button type="button" data-th="${i}" class="${i ? '' : 'on'}" aria-label="Ver foto ${i + 1}"><img data-src="${sfEsc(s)}" alt="" decoding="async"></button>`).join('')}</div>` : '');
+}
+
+/* Descarga las fotos pendientes de una galería (una sola vez) */
+function sfHydrate(gal) {
+  if (!gal || gal.dataset.h) return; gal.dataset.h = '1';
+  gal.querySelectorAll('img[data-src]').forEach(im => { im.src = im.dataset.src; im.removeAttribute('data-src'); });
 }
 
 /* Clicks dentro de una galería. Devuelve true si lo manejó. */
 function sfGalleryClick(e) {
-  const gal = e.target.closest('.sf-gal'); if (!gal) return false;
+  const gal = e.target.closest('.sf-gal'); if (!gal) return false; sfHydrate(gal);
   const sl = gal.querySelector('.sf-slides'); if (!sl) return false;
   const th = e.target.closest('[data-th]'), ar = e.target.closest('[data-slide]');
   if (!th && !ar) return false;
@@ -36,12 +44,19 @@ function sfLightbox(p, start = 0) {
   const draw = () => {
     el.innerHTML = `<button type="button" class="sf-x" data-close aria-label="Cerrar">${SF_ICON.close}</button>
       <div class="sf-lb-main">${imgs.length > 1 ? `<button type="button" class="sf-arrow l" data-lb="-1" aria-label="Anterior">${SF_ICON.prev}</button>` : ''}
-      <img src="${sfEsc(imgs[i])}" alt="${sfEsc(p.name)} (foto ${i + 1} de ${imgs.length})">
+      <div class="sf-lb-stage"><img src="${sfEsc(imgs[i])}" alt="${sfEsc(p.name)} (foto ${i + 1} de ${imgs.length})" decoding="async"></div>
       ${imgs.length > 1 ? `<button type="button" class="sf-arrow r" data-lb="1" aria-label="Siguiente">${SF_ICON.next}</button>` : ''}</div>
       <div class="sf-lb-cap"><strong>${sfEsc(p.name)}</strong><span>${sfArs(p.price)}</span></div>`;
   };
   const go = d => { i = (i + d + imgs.length) % imgs.length; draw(); };
   el.addEventListener('click', e => { const b = e.target.closest('[data-lb]'); if (b) go(+b.dataset.lb); });
+  /* Deslizar con el dedo para pasar de foto */
+  let sx = null, sy = 0;
+  el.addEventListener('touchstart', e => { sx = e.touches.length === 1 ? e.touches[0].clientX : null; sy = e.touches[0].clientY; }, { passive: true });
+  el.addEventListener('touchend', e => {
+    if (sx == null || imgs.length < 2) return; const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; sx = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) go(dx < 0 ? 1 : -1);
+  }, { passive: true });
   draw();
   return { el, key: e => { if (e.key === 'ArrowLeft') go(-1); else if (e.key === 'ArrowRight') go(1); } };
 }

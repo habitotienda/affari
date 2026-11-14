@@ -1,7 +1,7 @@
 /* Catálogo · tienda pública y vista previa del editor.
    mountStore(el, { store, products, slug }) -> { update({ store, products }) } */
 function mountStore(el, init) {
-  let stopPromos = () => {}, paused = false;
+  let stopPromos = () => {}, paused = false;   // paused se ajusta más abajo: en celulares modestos el fondo animado arranca pausado
   let store = init.store, products = init.products || [], cat = '', flt = { sort: '', min: '', max: '', stock: false }, lb = null, opener = null, drawer = false, formOpen = false;
   const info = { name: '', phone: '', delivery: '', address: '', note: '' };   // delivery: '' (sin elegir) | 'retiro' | 'envio'
   const byId = id => products.find(p => p.id === id);
@@ -43,6 +43,8 @@ function mountStore(el, init) {
   const root = el.querySelector('[data-root]'), layer = el.querySelector('[data-layer]'), q = el.querySelector('[data-q]');
   const $ = s => el.querySelector(s);
   if (embedded) root.dataset.emb = '';
+  /* Celular modesto (poca RAM o pocos núcleos): el fondo animado arranca pausado; el botón «Reanudar fondo» lo activa */
+  try { if (!embedded && matchMedia('(pointer:coarse)').matches && ((navigator.deviceMemory || 8) <= 4 || (navigator.hardwareConcurrency || 8) <= 4)) paused = true; } catch {}
 
   /* ---------- Piezas de UI ---------- */
   const stepper = (p, n, cls = '') => `<div class="sf-step ${cls}"><button type="button" data-act="dec" data-id="${p.id}" aria-label="Quitar uno de ${sfEsc(p.name)}">−</button><span aria-live="polite">${n}</span><button type="button" data-act="inc" data-id="${p.id}" aria-label="Agregar uno de ${sfEsc(p.name)}" ${n >= p.stock ? 'disabled' : ''}>+</button></div>`;
@@ -247,7 +249,11 @@ function mountStore(el, init) {
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
   });
-  q.oninput = drawList; drawAll(); hoursTimer = setInterval(tickHours, 30000);
+  let qt = 0; q.oninput = () => { clearTimeout(qt); qt = setTimeout(drawList, 180); };   // no redibuja 150 tarjetas en cada letra
+  /* Al tocar/acercarse a una galería se bajan sus demás fotos */
+  const warm = e => { const g = e.target.closest && e.target.closest('.sf-gal'); if (g) sfHydrate(g); };
+  ['touchstart', 'pointerover', 'focusin'].forEach(ev => el.addEventListener(ev, warm, { passive: true }));
+  drawAll(); hoursTimer = setInterval(tickHours, 30000);
 
   return { update(next) { if (next.store) store = next.store; if (next.products) products = next.products; drawAll(); } };
 }

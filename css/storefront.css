@@ -99,8 +99,10 @@
 /* ---- Visor ampliado ---- */
 .sf-lb{position:absolute;inset:0;display:flex;flex-direction:column;background:rgba(8,12,24,.94);color:#fff;animation:sffade .2s both}
 .sf-lb .sf-x{position:absolute;top:12px;right:12px;z-index:2;background:rgba(255,255,255,.14);color:#fff}
-.sf-lb-main{flex:1;min-height:0;position:relative;display:grid;place-items:center;padding:56px 12px 8px}.sf-lb-main img{max-width:100%;max-height:100%;object-fit:contain;border-radius:calc(var(--r)*.5)}
-.sf-lb .sf-arrow{opacity:1;top:calc(50% - 16px);background:rgba(255,255,255,.18);color:#fff}
+.sf-lb-main{flex:1;min-height:0;position:relative}
+.sf-lb-stage{position:absolute;inset:56px 12px 8px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.sf-lb-stage img{width:100%;height:100%;object-fit:contain;object-position:center;border-radius:calc(var(--r)*.5);color:transparent;font-size:0;touch-action:pan-y}
+.sf-lb .sf-arrow{z-index:3;opacity:1;top:calc(50% - 16px);background:rgba(255,255,255,.18);color:#fff}
 .sf-lb-cap{display:flex;justify-content:space-between;gap:12px;padding:12px 18px 18px}.sf-lb-cap strong{font-weight:700}.sf-lb-cap span{font-weight:800;font-variant-numeric:tabular-nums}
 @media(prefers-reduced-motion:reduce){.sf-shell *:not(.sf-bgfx *){animation:none!important;transition:none!important}}
 
@@ -359,3 +361,21 @@
 .sf-sendrow{position:sticky;bottom:0;display:grid;gap:6px;margin-bottom:-16px;padding:8px 0 16px;background:var(--card)}
 @keyframes sfshake{0%,100%{transform:none}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 @media(prefers-reduced-motion:reduce){.sf-opts.invalid .sf-opt span{animation:none}.sf-opt:hover span{transform:none}}
+
+/* ---- Fotos: nunca estiran la tarjeta (ni cargadas ni rotas) ---- */
+.sf-slides{min-width:0;min-height:0}
+.sf-slides img{min-height:0;max-height:100%;color:transparent;font-size:0;background:linear-gradient(90deg,var(--soft) 25%,color-mix(in srgb,var(--soft) 70%,#fff) 50%,var(--soft) 75%) 0 0/200% 100%}
+.sf-slides img.sf-broken{visibility:hidden}
+.sf-lth img,.sf-thumbs img{color:transparent;font-size:0}
+/* Lista horizontal: la foto llena el recuadro sin aportar altura propia (antes una foto vertical estiraba toda la tarjeta) */
+.sf-shell[data-view="list"] .sf-gal{align-self:stretch;overflow:hidden}
+.sf-shell[data-view="list"] .sf-slides,.sf-shell[data-view="list"] .sf-noimg{position:absolute;inset:0;height:auto;min-height:0;aspect-ratio:auto}
+.sf-shell[data-view="list"] .sf-noimg{display:grid}
+
+/* ---- Rendimiento en celulares: las tarjetas fuera de pantalla no se calculan ni se pintan ---- */
+.sf-card{content-visibility:auto;contain-intrinsic-size:auto 380px}
+.sf-shell[data-view="1"] .sf-card{contain-intrinsic-size:auto 520px}
+.sf-shell[data-view="list"] .sf-card{contain-intrinsic-size:auto 140px}
+.sf-card:nth-child(n+9){animation:none}                 /* solo las primeras entran animadas; 150 animaciones a la vez trababan el celular */
+.sf-thumbs button{background:var(--soft)}
+@media(prefers-reduced-motion:reduce){.sf-shell:not([data-emb]) .sf-bgfx *{animation:none!important}}
