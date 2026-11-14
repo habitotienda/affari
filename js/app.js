@@ -4,7 +4,7 @@ const ars = n => new Intl.NumberFormat('es-AR', { style: 'currency', currency: '
 const NAV = [
   ['dashboard', 'Dashboard', 'dashboard'], ['caja', 'Caja y Ventas', 'cash'], ['flujo', 'Flujo de caja', 'wallet'], ['reportes', 'Estadísticas', 'trend'],
   ['inventario', 'Inventario & Stock', 'box'], ['asistente', 'Asistente IA', 'spark'], ['fiados', 'Cuaderno de Fiados', 'book'], ['deudas', 'Deudas', 'scale'], ['clientes', 'Clientes', 'users'],
-  ['proveedores', 'Proveedores', 'truck'], ['comprobantes', 'Comprobantes', 'receipt'], ['catalogo', 'Catálogo Digital', 'store'], ['estudio', 'Estudio de Diseño', 'palette'], ['config', 'Configuración', 'settings']
+  ['proveedores', 'Proveedores', 'truck'], ['catalogo', 'Catálogo Digital', 'store'], ['estudio', 'Estudio de Diseño', 'palette'], ['config', 'Configuración', 'settings']
 ];
 const state = { user: null, view: 'dashboard', tk: 0 };
 /* ---------- PWA: instalación y Service Worker ---------- */
@@ -42,10 +42,10 @@ const refresh = () => renderView(true);
    Los datos viven en DataStore (js/datastore.js): una pestaña ya visitada se dibuja al instante desde memoria y se actualiza sola de fondo. */
 /* Vistas de solo lectura: si llegan datos nuevos mientras se miran, se redibujan solas. Las demás (editor del catálogo, estudio, asistente, configuración)
    nunca se pisan: tienen formularios o un borrador en curso. */
-const LIVE_SAFE = new Set(['dashboard', 'caja', 'fiados', 'inventario', 'clientes', 'proveedores', 'deudas', 'comprobantes']);
+const LIVE_SAFE = new Set(['dashboard', 'caja', 'fiados', 'inventario', 'clientes', 'proveedores', 'deudas']);
 /* Rutas de cada vista la primera vez (después se aprenden solas de lo que realmente pide cada una) */
 const WARM = { dashboard: ['/dashboard'], caja: ['/dashboard', '/sales'], inventario: ['/products'], fiados: ['/clients'], clientes: ['/clients'],
-  proveedores: ['/suppliers'], deudas: ['/debts'], comprobantes: ['/invoices', '/fiscal'], catalogo: ['/products'] };
+  proveedores: ['/suppliers'], deudas: ['/debts'], catalogo: ['/products'] };
 const viewPaths = v => DataStore.depsOf(v).length ? DataStore.depsOf(v) : (WARM[v] || []);
 const SKELETON = '<div class="skel" aria-busy="true" aria-label="Cargando"><div class="skel-h"></div><div class="skel-row"><i></i><i></i><i></i><i></i></div><div class="skel-card"></div></div>';
 /* Con localStorage.affariPerf = 1 la consola muestra cuánto tarda cada cambio de sección */

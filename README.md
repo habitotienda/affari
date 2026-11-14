@@ -81,6 +81,10 @@ El cálculo usa la zona horaria del negocio (`APP_TZ`) y la hora del servidor, n
 
 Pruebas: `node tests/js/datastore.test.js` · `node tests/js/navigation.test.js` · `node tests/js/hours.test.js` · `python tests/hours_test.py` · `python tests/google_flow_test.py`.
 
+## Nueva venta (Caja y Ventas / Dashboard)
+Flujo en 4 pasos (`js/sale-flow.js`, `css/sale-flow.css`): **1** buscar y sumar productos (con variantes) → **2** resumen en lista (cantidad y precio editables) → **3** pago: Pagado/Deuda, medio, descuento % o $, cliente (de tu lista, manual o importado de la agenda del teléfono), concepto y nota → **4** comprobante en imagen PNG para **Compartir**, **WhatsApp** (al número del cliente) o **Guardar**.
+Backend: `POST /api/sales/cart` (varios productos en una venta; una fila de caja por producto con el descuento repartido; si es Deuda queda como fiado del cliente). La sección «Comprobantes» (facturas) se sacó del menú; las rutas `/api/invoices` y `/api/fiscal` siguen en el backend por si se retoman.
+
 ## Estructura
 ```
 backend/

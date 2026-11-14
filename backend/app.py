@@ -156,6 +156,14 @@ class SaleIn(BaseModel):
     concept: str = ""; amount: Optional[float] = None; method: str = "Efectivo"
     kind: str = "entrada"; product_id: Optional[int] = None; qty: int = 1; variant_id: Optional[int] = None
 
+class CartItemIn(BaseModel):
+    product_id: int; variant_id: Optional[int] = None; qty: int = 1; price: Optional[float] = None
+
+class CartSaleIn(BaseModel):
+    items: list[CartItemIn]; method: str = "Efectivo"; paid: bool = True
+    discount: float = 0; client_id: Optional[int] = None; client_name: str = ""; client_phone: str = ""
+    concept: str = ""; note: str = ""
+
 class FiadoIn(BaseModel):
     client_id: Optional[int] = None; name: str = ""; phone: str = ""
     amount: Optional[float] = None; concept: str = ""; product_id: Optional[int] = None; qty: int = 1; variant_id: Optional[int] = None
@@ -355,6 +363,55 @@ def add_sale(d: SaleIn, u=Depends(current_user)):
         c.execute("INSERT INTO sales(store_id,kind,concept,amount,cost,method,product_id,product_name,qty) VALUES (?,?,?,?,?,?,?,?,?)",
                   (u["store_id"], d.kind, concept or ("Venta" if d.kind == "entrada" else "Gasto"), amount, cost, d.method, *item))
     return {"ok": True}
+
+@app.post("/api/sales/cart")
+def add_cart_sale(d: CartSaleIn, u=Depends(current_user)):
+    """Venta con varios productos, descuento y cliente. Una fila de caja por producto (las estadísticas por producto siguen andando);
+    el descuento se reparte en proporción. Si no está pagada, queda como fiado del cliente."""
+    if not d.items or len(d.items) > 60:
+        raise HTTPException(400, "Agregá al menos un producto.")
+    if d.method not in METHODS:
+        raise HTTPException(400, "Medio de pago inválido.")
+    sid, phone = u["store_id"], re.sub(r"\D", "", d.client_phone or "")
+    with db.conn() as c:
+        cl = c.execute("SELECT * FROM clients WHERE id=? AND store_id=?", (d.client_id, sid)).fetchone() if d.client_id else None
+        name = d.client_name.strip()[:100]
+        if not cl and (name or not d.paid):
+            if not name:
+                raise HTTPException(400, "Elegí el cliente: una venta a deuda necesita uno.")
+            if not d.paid and not 8 <= len(phone) <= 15:
+                raise HTTPException(400, "El teléfono / WhatsApp del cliente es obligatorio para anotar una deuda.")
+            cid = c.execute("INSERT INTO clients(store_id,name,phone) VALUES (?,?,?)", (sid, name, phone)).lastrowid
+            cl = c.execute("SELECT * FROM clients WHERE id=?", (cid,)).fetchone()
+        lines = []
+        for it in d.items:
+            p, cost = take_product(c, sid, it.product_id, it.qty, it.variant_id)
+            unit = it.price if it.price is not None and it.price >= 0 else p["price"]
+            lines.append({"name": p["label"], "pid": p["id"], "pname": p["name"], "qty": it.qty, "unit": round(unit, 2), "cost": cost, "line": round(unit * it.qty, 2)})
+        subtotal = round(sum(l["line"] for l in lines), 2)
+        disc = round(min(max(d.discount, 0), subtotal), 2)
+        if subtotal - disc <= 0:
+            raise HTTPException(400, "El total de la venta debe ser mayor a cero.")
+        left, concept = disc, d.concept.strip()[:120]
+        first_id = None
+        for n, l in enumerate(lines):
+            share = left if n == len(lines) - 1 else round(disc * l["line"] / subtotal, 2)
+            left = round(left - share, 2)
+            amount = round(l["line"] - share, 2)
+            text = f"{l['qty']} × {l['name']}"
+            if concept:
+                text = f"{concept} · {text}"
+            kind, method = ("entrada", d.method) if d.paid else ("fiado", "Fiado")
+            if not d.paid:
+                text = f"Fiado: {cl['name']} ({text})"
+            rid = c.execute("INSERT INTO sales(store_id,client_id,kind,concept,amount,cost,method,product_id,product_name,qty) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                            (sid, cl["id"] if cl else None, kind, text, amount, l["cost"], method, l["pid"], l["pname"], l["qty"])).lastrowid
+            first_id = first_id or rid
+        if not d.paid:
+            c.execute("UPDATE clients SET balance = balance + ? WHERE id=?", (subtotal - disc, cl["id"]))
+    return {"ok": True, "number": first_id, "subtotal": subtotal, "discount": disc, "total": round(subtotal - disc, 2),
+            "client": ({"id": cl["id"], "name": cl["name"], "phone": cl["phone"]} if cl else None),
+            "items": [{"name": l["name"], "qty": l["qty"], "unit": l["unit"]} for l in lines]}
 
 # ---------- Fiados ----------
 @app.get("/api/clients")

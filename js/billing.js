@@ -2,7 +2,7 @@
    Usa state, api(), httpRequest(), openModal(), toast(), icon(), esc(), renderShell(), renderView() */
 const Billing = (() => {
   // Vista del menú → función que la desbloquea (el servidor aplica el mismo bloqueo: esto solo evita pantallas vacías)
-  const FEATURE_OF = { asistente: 'ai', catalogo: 'catalog', estudio: 'studio', reportes: 'reports', flujo: 'advanced', proveedores: 'advanced', deudas: 'advanced', comprobantes: 'advanced' };
+  const FEATURE_OF = { asistente: 'ai', catalogo: 'catalog', estudio: 'studio', reportes: 'reports', flujo: 'advanced', proveedores: 'advanced', deudas: 'advanced' };
   const LABEL = { ai: 'el Asistente IA', catalog: 'el Catálogo digital', studio: 'el Estudio de Diseño', reports: 'las Estadísticas y reportes', reminders: 'los recordatorios por WhatsApp', advanced: 'esta sección' };
   const PLANS = [
     { id: 'pro', name: 'Pro', price: '$9.900', cta: 'Probar Pro', hot: true,
