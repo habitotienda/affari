@@ -156,6 +156,7 @@ class ProductIn(BaseModel):
 class SaleIn(BaseModel):
     concept: str = ""; amount: Optional[float] = None; method: str = "Efectivo"
     kind: str = "entrada"; product_id: Optional[int] = None; qty: int = 1; variant_id: Optional[int] = None
+    date: str = ""; supplier: str = ""      # date: AAAA-MM-DD si se hizo otro día · supplier: proveedor del gasto (texto, opcional)
 
 class CartItemIn(BaseModel):
     product_id: int; variant_id: Optional[int] = None; qty: int = 1; price: Optional[float] = None
@@ -348,11 +349,26 @@ def list_sales(limit: int = 100, u=Depends(current_user)):
                          (u["store_id"], min(max(limit, 1), 500))).fetchall()
     return [dict(r) for r in rows]
 
+def sale_when(date_str):
+    """'AAAA-MM-DD' → 'AAAA-MM-DD 12:00:00' (para ventas/gastos hechos otro día). Vacío → None (se usa la hora actual)."""
+    if not date_str:
+        return None
+    try:
+        day = datetime.strptime(date_str.strip(), "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(400, "La fecha no es válida.")
+    if day.date() > (datetime.now() + timedelta(days=1)).date():     # +1 día de margen por la diferencia horaria con el celular
+        raise HTTPException(400, "La fecha no puede ser futura.")
+    if day.year < 2000:
+        raise HTTPException(400, "La fecha no es válida.")
+    return day.strftime("%Y-%m-%d") + " 12:00:00"
+
 @app.post("/api/sales")
 def add_sale(d: SaleIn, u=Depends(current_user)):
     if d.kind not in ("entrada", "salida") or d.method not in METHODS:
         raise HTTPException(400, "Tipo de movimiento o medio de pago inválido.")
     concept, amount, cost, item = d.concept.strip(), d.amount, 0, (None, None, 0)
+    when = sale_when(d.date)
     with db.conn() as c:
         if d.product_id and d.kind == "entrada":
             p, cost = take_product(c, u["store_id"], d.product_id, d.qty, d.variant_id)
@@ -361,8 +377,14 @@ def add_sale(d: SaleIn, u=Depends(current_user)):
             concept = concept or f"{d.qty} × {p['label']}"
         if not amount or amount <= 0:
             raise HTTPException(400, "El monto debe ser mayor a cero.")
-        c.execute("INSERT INTO sales(store_id,kind,concept,amount,cost,method,product_id,product_name,qty) VALUES (?,?,?,?,?,?,?,?,?)",
-                  (u["store_id"], d.kind, concept or ("Venta" if d.kind == "entrada" else "Gasto"), amount, cost, d.method, *item))
+        concept = concept or ("Venta" if d.kind == "entrada" else "Gasto")
+        supplier = re.sub(r"\s+", " ", d.supplier or "").strip()[:60]
+        if supplier and d.kind == "salida":          # sin supplier_id a propósito: así sigue contando como gasto del período en los reportes
+            concept = f"{concept[:90]} · Proveedor: {supplier}"
+        cols, vals = "store_id,kind,concept,amount,cost,method,product_id,product_name,qty", [u["store_id"], d.kind, concept, amount, cost, d.method, *item]
+        if when:
+            cols += ",created_at"; vals.append(when)
+        c.execute(f"INSERT INTO sales({cols}) VALUES ({','.join('?' * len(vals))})", vals)
     return {"ok": True}
 
 @app.post("/api/sales/cart")
@@ -374,17 +396,7 @@ def add_cart_sale(d: CartSaleIn, u=Depends(current_user)):
     if d.method not in METHODS:
         raise HTTPException(400, "Medio de pago inválido.")
     sid, phone = u["store_id"], re.sub(r"\D", "", d.client_phone or "")
-    when = None
-    if d.date:
-        try:
-            day = datetime.strptime(d.date.strip(), "%Y-%m-%d")
-        except ValueError:
-            raise HTTPException(400, "La fecha de la venta no es válida.")
-        if day.date() > (datetime.now() + timedelta(days=1)).date():     # +1 día de margen por la diferencia horaria con el celular
-            raise HTTPException(400, "La fecha de la venta no puede ser futura.")
-        if day.year < 2000:
-            raise HTTPException(400, "La fecha de la venta no es válida.")
-        when = day.strftime("%Y-%m-%d") + " 12:00:00"
+    when = sale_when(d.date)
     with db.conn() as c:
         cl = c.execute("SELECT * FROM clients WHERE id=? AND store_id=?", (d.client_id, sid)).fetchone() if d.client_id else None
         name = d.client_name.strip()[:100]

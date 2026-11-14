@@ -51,15 +51,22 @@ function bindProduct(form) {
 const variantId = f => { const v = f.querySelector('#mv'); return v && !v.closest('.hidden') && v.value ? Number(v.value) : null; };
 const productFields = ps => fld('Producto (opcional)', `<select id="mp">${prodOpts(ps)}</select>`, 'mp') + `<div class="hidden" data-vwrap>${fld('Variante', '<select id="mv"></select>', 'mv')}</div>` + fld('Cantidad', '<input id="mq" type="number" min="1" value="1">', 'mq');
 
+const todayISO = () => { const d = new Date(), z = k => String(k).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
 async function openSaleModal(kind = 'entrada') {
   const sale = kind === 'entrada', products = sale ? await api('/products') : [];
+  const suppliers = sale ? [] : await api('/suppliers').catch(() => []);        // para sugerir proveedores ya cargados (se puede escribir otro)
+  const today = todayISO();
   const { form } = openModal({
     title: sale ? 'Nueva venta' : 'Registrar gasto', submit: sale ? 'Registrar venta' : 'Registrar gasto',
-    html: (sale ? productFields(products) : '') + fld('Concepto', `<input id="mc" value="${sale ? 'Venta mostrador' : ''}" placeholder="${sale ? '' : 'Ej: Pago proveedor'}" required>`, 'mc') +
-      fld('Monto (ARS)', '<input id="ma" type="number" min="1" step="any" inputmode="decimal" placeholder="0" required>', 'ma') + methodSeg(),
+    html: (sale ? productFields(products) : '') + fld('Concepto', `<input id="mc" value="${sale ? 'Venta mostrador' : ''}" placeholder="${sale ? '' : 'Ej: Alquiler, luz, flete'}" required>`, 'mc') +
+      (sale ? '' : fld('Proveedor (opcional)', `<input id="mv" list="mvl" maxlength="60" autocomplete="off" placeholder="Elegí uno o escribí el nombre"><datalist id="mvl">${suppliers.map(s => `<option value="${esc(s.name)}">`).join('')}</datalist>`, 'mv')) +
+      fld('Monto (ARS)', '<input id="ma" type="number" min="1" step="any" inputmode="decimal" placeholder="0" required>', 'ma') +
+      fld(sale ? 'Fecha de la venta' : 'Fecha del gasto', `<input id="md" type="date" max="${today}" value="${today}" required>`, 'md') + methodSeg(),
     onSubmit: async (f, close) => {
+      const day = f.querySelector('#md').value;
       await api('/sales', { method: 'POST', body: { kind, concept: f.querySelector('#mc').value.trim(), amount: Number(f.querySelector('#ma').value),
-        method: f.querySelector('input[name=sm]:checked').value, product_id: sale && f.querySelector('#mp').value ? Number(f.querySelector('#mp').value) : null, variant_id: sale ? variantId(f) : null, qty: sale ? Number(f.querySelector('#mq').value) || 1 : 1 } });
+        method: f.querySelector('input[name=sm]:checked').value, product_id: sale && f.querySelector('#mp').value ? Number(f.querySelector('#mp').value) : null, variant_id: sale ? variantId(f) : null, qty: sale ? Number(f.querySelector('#mq').value) || 1 : 1,
+        supplier: sale ? '' : f.querySelector('#mv').value.trim(), date: day && day !== today ? day : '' } });
       await done(close, sale ? 'Venta registrada' : 'Gasto registrado');
     }
   });
