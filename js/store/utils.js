@@ -68,21 +68,23 @@ function sfContrast(a, b) {
    Antes solo se reintentaba cuando el navegador avisaba de un error; pero una foto puede quedarse «cargando» para siempre sin avisar nada
    (servidor dormido en Render, conexión cortada a medias, pedidos en cola). Ahora:
    1) error  -> reintenta con espera creciente (hasta 8 veces) y una marca _r para saltar cualquier respuesta rota en caché;
-   2) colgada -> si una foto visible no terminó de bajar a los 8 s (12 s, 16 s… si ya falló antes), se la vuelve a pedir;
+   2) colgada -> si una foto visible no terminó de bajar a los 25 s (más si ya falló antes), se la vuelve a pedir con la MISMA URL
+                 (con muchas fotos en cola no hay que repetir pedidos: eso solo satura más al servidor);
    3) rota    -> queda con la clase sf-broken y un toque sobre ella (o volver a la pestaña / recuperar internet) la reintenta;
    4) solo reintenta fotos que están cerca de la pantalla, así no rompe la carga diferida de las demás. */
 (() => {
   if (window.__sfImgRetry) return; window.__sfImgRetry = true;
-  const MAX = 8, STALL = 8000, ours = u => /^\/api\/img\//.test(u || '');
+  const MAX = 8, STALL = 25000, ours = u => /^\/api\/img\//.test(u || '');
   const bust = (u, n) => u.replace(/([?&])_r=\d+&?/, '$1').replace(/[?&]$/, '') + (u.includes('?') ? '&' : '?') + '_r=' + n;
   const failed = new Set(), watch = new Map();             // img -> temporizador de «colgada»
   const near = img => { if (!img.isConnected) return false; const r = img.getBoundingClientRect(); return (r.width || r.height) && r.bottom > -1500 && r.top < innerHeight + 1500 && r.right > -1500 && r.left < innerWidth + 1500; };
   const stop = img => { clearTimeout(watch.get(img)); watch.delete(img); };
-  const retry = (img, n) => {
+  const retry = (img, n, fresh = true) => {
     stop(img);
     if (!img.isConnected) return failed.delete(img);
     img.dataset.rt = n; img.loading = 'eager'; img.classList.remove('sf-broken');
-    img.src = bust(img.dataset.src0 || img.getAttribute('src'), n); arm(img);
+    const base = img.dataset.src0 || img.getAttribute('src');
+    img.src = fresh ? bust(base, n) : base; arm(img);          // fresh: salta cualquier respuesta rota en caché (solo después de un error real)
   };
   const arm = img => {
     const src = img.getAttribute('src'); if (!ours(src) && !ours(img.dataset.src0)) return;
@@ -93,7 +95,7 @@ function sfContrast(a, b) {
       if (!img.isConnected || (img.complete && img.naturalWidth)) return;
       if (!near(img) || document.hidden) return arm(img);   // fuera de pantalla o pestaña en segundo plano: se espera
       if (n >= MAX) { img.classList.add('sf-broken'); failed.add(img); return; }
-      img.dataset.src0 = img.dataset.src0 || src; retry(img, n + 1);
+      img.dataset.src0 = img.dataset.src0 || src; retry(img, n + 1, false);
     }, STALL + n * 4000 + Math.random() * 1500));
   };
   const revive = () => failed.forEach(img => retry(img, 1));
@@ -116,4 +118,19 @@ function sfContrast(a, b) {
 })();
 
 /* Versión reducida de una foto de producto (/api/img/…): el servidor la achica; así el celular no decodifica fotos enormes. Otras URLs quedan igual. */
-const sfThumb = (u, w) => /^\/api\/img\//.test(u || '') ? u + (u.includes('?') ? '&' : '?') + 'w=' + w : u;
+/* Miniaturas en lote. Pedir 150 fotos una por una es lento aunque cada una sea chica (150 viajes al servidor). Antes de mostrar una lista de productos
+   se traen de a 40 en un solo pedido (GET /api/thumbs) y quedan en memoria: sfThumb(url, 160) las devuelve al instante como data URL.
+   Si alguna no llegó, sfThumb cae a la URL normal /api/img/…&w=160, que sigue funcionando sola. */
+const THUMB_CACHE = new Map();
+const thumbKey = u => { const m = /^\/api\/img\/(\d+)\/0\?v=([0-9a-f]*)/.exec(u || ''); return m ? m[1] + ':' + m[2] : null; };
+const sfThumb = (u, w) => {
+  if (w === 160) { const k = thumbKey(u); if (k && THUMB_CACHE.has(k)) return THUMB_CACHE.get(k); }
+  return /^\/api\/img\//.test(u || '') ? u + (u.includes('?') ? '&' : '?') + 'w=' + w : u;
+};
+async function prefetchThumbs(products, maxWait = 6000) {
+  const keys = [...new Set((products || []).map(p => thumbKey(p.images && p.images[0])).filter(k => k && !THUMB_CACHE.has(k)))].sort();
+  if (!keys.length) return;
+  const one = async ch => { try { const r = await fetch('/api/thumbs?k=' + ch.join(',')); if (r.ok) Object.entries(await r.json()).forEach(([k, v]) => THUMB_CACHE.set(k, v)); } catch (e) { /* sigue con las URLs normales */ } };
+  const jobs = []; for (let i = 0; i < keys.length; i += 40) jobs.push(one(keys.slice(i, i + 40)));
+  await Promise.race([Promise.all(jobs), new Promise(r => setTimeout(r, maxWait))]);     // nunca deja la pantalla esperando más de maxWait
+}

@@ -31,9 +31,9 @@ DataStore.init(path => httpRequest(path));
 
 /* api(): los GET pasan por la caché (DataStore); cualquier escritura la invalida y vuelve a calentarla en segundo plano */
 async function api(path, { method = 'GET', body, timeout = 0 } = {}) {
-  if (method === 'GET' && !timeout && DataStore.cacheable(path)) return DataStore.get(path);
+  if (method === 'GET' && !timeout && DataStore.cacheable(path)) { const d = await DataStore.get(path); if (path === '/products') await prefetchThumbs(d); return d; }
   let data;
-  try { data = JSON.parse(await httpRequest(path, { method, body, timeout })); }
+  try { data = JSON.parse(await httpRequest(path, { method, body, timeout })); if (method === 'GET' && path === '/products') await prefetchThumbs(data); }
   catch (e) { if (e.status === 402 && method !== 'GET' && typeof Billing !== 'undefined') Billing.showUpgrade({ message: e.message }); throw e; }
   if (method !== 'GET' && !/^\/(login|register|auth\/)/.test(path)) { DataStore.invalidate(); DataStore.warmSoon(typeof state === 'undefined' ? '' : state.view); }   // incluye /ai/chat: el asistente también modifica productos y stock
   return data;

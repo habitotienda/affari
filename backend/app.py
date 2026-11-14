@@ -561,18 +561,23 @@ def list_products(u=Depends(current_user)):
 _THUMBS = {}                      # (pid, i, v, w) -> (bytes, mime); caché chica en memoria para no reescalar la misma foto cada vez
 _THUMBS_MAX = 400
 _THUMB_W = (160, 320, 640)
+_IMG_RE = re.compile(r"^data:(image/[a-z]+);base64,(.+)$", re.S)
 
 def _thumb(raw, mime, w):
-    """Versión reducida (ancho máx. w) de la foto. Si algo falla, se devuelve la original."""
+    """Versión reducida (ancho máx. w) de la foto. Si algo falla, se devuelve la original.
+    En JPEG se usa draft(): el decodificador entrega la foto ya a 1/2, 1/4 u 1/8 de tamaño, que es varias veces más rápido que abrirla entera."""
     try:
         from PIL import Image
         im = Image.open(io.BytesIO(raw))
         if im.width <= w: return raw, mime
+        h = max(1, round(im.height * w / im.width))
+        if im.format == "JPEG":
+            im.draft("RGB", (w, h))
         im = im.convert("RGBA" if im.mode in ("RGBA", "LA", "P") else "RGB")
-        im = im.resize((w, max(1, round(im.height * w / im.width))), Image.LANCZOS)
+        im = im.resize((w, h), Image.BICUBIC, reducing_gap=2.0)
         buf = io.BytesIO()
-        if im.mode == "RGBA": im.save(buf, "WEBP", quality=80); return buf.getvalue(), "image/webp"
-        im.save(buf, "JPEG", quality=80, optimize=True); return buf.getvalue(), "image/jpeg"
+        if im.mode == "RGBA": im.save(buf, "WEBP", quality=78, method=2); return buf.getvalue(), "image/webp"
+        im.save(buf, "JPEG", quality=78); return buf.getvalue(), "image/jpeg"
     except Exception:
         return raw, mime
 
@@ -580,8 +585,32 @@ _IMG_SLOTS = threading.Semaphore(3)           # a lo sumo 3 fotos procesándose 
 _GEN_LOCKS, _GEN_LOCKS_L = {}, threading.Lock()
 _WARM_AT = {}
 
-def _gen_thumbs(pid, v):
-    """Lee las fotos del producto UNA vez y guarda todas sus miniaturas (160/320/640). Devuelve False si la versión ya cambió."""
+def _gen_one(pid, i, v, w):
+    """Prepara UNA miniatura (foto i, ancho w) y la guarda. Es lo que se usa cuando alguien pide una que todavía no existe: rápido, sin tocar el resto.
+    Devuelve False si el producto cambió de versión o la foto no existe."""
+    with _IMG_SLOTS:
+        with db.conn() as c:
+            if c.execute("SELECT 1 FROM product_thumbs WHERE product_id=? AND idx=? AND w=? AND v=?", (pid, i, w, v)).fetchone():
+                return True
+            r = c.execute("SELECT images, img_v FROM products WHERE id=?", (pid,)).fetchone()
+        if not r or v != r["img_v"]:
+            return False
+        imgs = parse_images(r["images"])
+        m = _IMG_RE.match(imgs[i] or "") if 0 <= i < len(imgs) else None
+        if not m:
+            return False
+        data, mime = _thumb(base64.b64decode(m.group(2)), m.group(1), w)
+        try:
+            with db.conn() as c:
+                c.execute("DELETE FROM product_thumbs WHERE product_id=? AND idx=? AND w=?", (pid, i, w))
+                c.execute("INSERT INTO product_thumbs(product_id,idx,v,w,mime,data) VALUES (?,?,?,?,?,?)", (pid, i, v, w, mime, base64.b64encode(data).decode()))
+        except Exception:
+            pass                                                # otro pedido la guardó justo antes: da igual
+    return True
+
+def _gen_thumbs(pid, v, first_only=False):
+    """Lee las fotos del producto UNA vez y guarda sus miniaturas (160/320/640). first_only=True hace solo la foto principal (lo que se ve en las listas).
+    Devuelve False si la versión ya cambió."""
     with _GEN_LOCKS_L:
         lock = _GEN_LOCKS.setdefault(pid, threading.Lock())
     with lock, _IMG_SLOTS:
@@ -592,8 +621,8 @@ def _gen_thumbs(pid, v):
         if not r or v != r["img_v"]:
             return False
         rows = []
-        for i, src in enumerate(parse_images(r["images"])[:5]):
-            m = re.match(r"^data:(image/[a-z]+);base64,(.+)$", src or "", re.S)
+        for i, src in enumerate(parse_images(r["images"])[:1 if first_only else 5]):
+            m = _IMG_RE.match(src or "")
             if not m:
                 continue
             raw = base64.b64decode(m.group(2))
@@ -615,36 +644,43 @@ def _warm_later(pid, v, delay=3):
 
 _MISSING = "SELECT p.id, p.img_v FROM products p WHERE p.img_n>0 AND NOT EXISTS (SELECT 1 FROM product_thumbs t WHERE t.product_id=p.id AND t.v=p.img_v)"
 
+def _warm_rows(rows):
+    """Prepara la foto principal de varios productos en paralelo (3 a la vez)."""
+    from concurrent.futures import ThreadPoolExecutor
+    def one(r):
+        try: _gen_thumbs(r["id"], r["img_v"], first_only=True)
+        except Exception: pass
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        list(ex.map(one, rows))
+
 def _warm_store(sid):
-    """Genera, de a uno, las miniaturas que falten de un comercio (se llama al abrir el catálogo o el panel). Como máximo una vez cada 10 minutos por comercio."""
-    if time.time() - _WARM_AT.get(sid, 0) < 600:
+    """Repone las miniaturas que falten de un comercio (se llama al abrir el panel o el catálogo). Como máximo una vez cada 2 minutos por comercio."""
+    if time.time() - _WARM_AT.get(sid, 0) < 120:
         return
     _WARM_AT[sid] = time.time()
     def run():
         try:
             with db.conn() as c:
-                rows = c.execute(_MISSING + " AND p.store_id=? LIMIT 300", (sid,)).fetchall()
-            for r in rows:
-                _gen_thumbs(r["id"], r["img_v"])
+                rows = c.execute(_MISSING + " AND p.store_id=? LIMIT 400", (sid,)).fetchall()
+            _warm_rows(rows)
         except Exception:
             pass
     threading.Thread(target=run, daemon=True).start()
 
 def _warm_all():
     """Al arrancar el servidor: deja listas las miniaturas de TODOS los productos que no las tengan (productos viejos, cambios de versión,
-    miniaturas que fallaron). Va de a poco para no frenar a quien esté usando la app."""
-    time.sleep(8)
+    miniaturas que fallaron). Primero la foto principal de cada uno, en paralelo."""
+    time.sleep(2)
     tried = set()                                            # un producto cuya foto no se pudo achicar no se reintenta en bucle
-    for _ in range(40):                                      # tope de seguridad: 40 tandas de 25 productos
+    for _ in range(100):
         try:
             with db.conn() as c:
-                rows = [r for r in c.execute(_MISSING + " LIMIT 200").fetchall() if (r["id"], r["img_v"]) not in tried][:25]
+                rows = [r for r in c.execute(_MISSING + " LIMIT 300").fetchall() if (r["id"], r["img_v"]) not in tried][:30]
             if not rows: return
-            for r in rows:
-                tried.add((r["id"], r["img_v"]))
-                _gen_thumbs(r["id"], r["img_v"]); time.sleep(0.15)
+            tried.update((r["id"], r["img_v"]) for r in rows)
+            _warm_rows(rows)
         except Exception:
-            time.sleep(5)
+            time.sleep(3)
 
 threading.Thread(target=_warm_all, daemon=True).start()
 
@@ -679,7 +715,7 @@ def product_image(pid: int, i: int, v: str = "", w: int = 0):
                 return c.execute("SELECT mime, data FROM product_thumbs WHERE product_id=? AND idx=? AND w=? AND v=?", (pid, i, w, v)).fetchone()
         try:
             r = lookup()
-            if not r and _gen_thumbs(pid, v):
+            if not r and _gen_one(pid, i, v, w):
                 r = lookup()
         except Exception:
             r = None
@@ -701,6 +737,35 @@ def product_image(pid: int, i: int, v: str = "", w: int = 0):
         data, mime2 = _thumb(raw, mime, w)
         return Response(data, media_type=mime2, headers=_IMG_SHORT)
     return Response(raw, media_type=mime, headers=_IMG_HEADERS)
+
+@app.get("/api/thumbs")
+def thumbs_batch(k: str = ""):
+    """Miniaturas (160 px) de la foto principal de muchos productos en UN solo pedido: k = "id:versión,id:versión,…" (máx. 60).
+    Devuelve {"id:versión": "data:image/…;base64,…"}. Es mucho más rápido que 150 pedidos sueltos; y como la clave incluye la versión,
+    cuando viene completa el navegador la guarda para siempre."""
+    pairs = []
+    for part in k.split(",")[:60]:
+        m = re.fullmatch(r"(\d+):([0-9a-f]{0,12})", part)
+        if m: pairs.append((int(m[1]), m[2]))
+    out = {}
+    def fetch():
+        with db.conn() as c:
+            rows = c.execute(f"SELECT product_id, v, mime, data FROM product_thumbs WHERE idx=0 AND w=160 AND product_id IN ({','.join('?' * len(pairs))})",
+                             tuple(p for p, _ in pairs)).fetchall()
+        for r in rows:
+            if (r["product_id"], r["v"]) in want:
+                out[f"{r['product_id']}:{r['v']}"] = f"data:{r['mime']};base64,{r['data']}"
+    if pairs:
+        want = set(pairs)
+        fetch()
+        falta = [(p, v) for p, v in pairs if f"{p}:{v}" not in out]
+        for p, v in falta[:15]:                                # las que aún no estaban se preparan ahora (una foto, un ancho: es rápido)
+            try:
+                if _gen_one(p, 0, v, 160): fetch()
+            except Exception:
+                pass
+    done = all(f"{p}:{v}" in out for p, v in pairs)
+    return JSONResponse(out, headers=_IMG_HEADERS if done else {"Cache-Control": "no-store"})
 
 @app.post("/api/products")
 def create_product(d: ProductIn, u=Depends(current_user)):
