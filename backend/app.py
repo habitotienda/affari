@@ -1,4 +1,4 @@
-import base64, hashlib, io, json, os, re, threading, time
+import base64, hashlib, io, json, logging, os, re, threading, time
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, Query
@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import database as db
 import auth_handler as auth
-import reports, exporters, operations as ops, ai_agent, cf_images, hours as hrs, google_auth, billing, treinta_import
+import reports, exporters, operations as ops, ai_agent, cf_images, hours as hrs, google_auth, billing, treinta_import, image_store
 
 load_dotenv()
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -56,7 +56,9 @@ def _keep_img(v, old):
         return v
     if isinstance(v, str) and DESIGN_URL.match(v):          # diseño incluido en la app (galería)
         return v
-    if isinstance(v, str) and v.startswith("/api/media/") and isinstance(old, str) and old.startswith("data:"):
+    if image_store.is_ours(v):                              # imagen ya subida a Supabase Storage
+        return v
+    if isinstance(v, str) and v.startswith("/api/media/") and isinstance(old, str) and (old.startswith("data:") or image_store.is_ours(old)):
         return old
     return ""
 
@@ -293,14 +295,21 @@ def update_store(d: StoreIn, u=Depends(current_user)):
 def save_design(d: DesignIn, u=Depends(current_user)):
     with db.conn() as c:
         row = c.execute("SELECT theme FROM stores WHERE id=?", (u["store_id"],)).fetchone()
-    theme = json.dumps(clean_theme(d.theme, parse_theme(row["theme"] if row else None)))
-    if d.logo and (len(d.logo) > 300_000 or not IMG.match(d.logo)):
+    theme = clean_theme(d.theme, parse_theme(row["theme"] if row else None))
+    logo = d.logo
+    if logo and not image_store.is_ours(logo) and (len(logo) > 300_000 or not IMG.match(logo)):
         raise HTTPException(400, "El logo debe ser una imagen PNG, JPG o WebP de hasta 300 KB.")
+    try:                                                    # imágenes nuevas (data URL) -> WebP en Supabase; en la base solo queda la URL
+        theme = json.dumps(image_store.persist_theme(theme, u["store_id"]))
+        logo = image_store.persist_logo(logo, u["store_id"]) if logo else logo
+    except image_store.ImageStoreError as e:
+        log_img.warning("diseño: %s", e)
+        raise HTTPException(502, "No pudimos guardar las imágenes del catálogo. Probá de nuevo en un momento.")
     with db.conn() as c:
         if d.logo is None:
             c.execute("UPDATE stores SET theme=? WHERE id=?", (theme, u["store_id"]))
         else:
-            c.execute("UPDATE stores SET theme=?, logo=? WHERE id=?", (theme, d.logo or None, u["store_id"]))
+            c.execute("UPDATE stores SET theme=?, logo=? WHERE id=?", (theme, logo or None, u["store_id"]))
         forget_user(u["id"])
         return public_user(load_user(c, u["id"], logo=True))
 
@@ -502,10 +511,29 @@ def check_product(d: ProductIn):
         raise HTTPException(400, "Precio, costo y stock no pueden ser negativos.")
     if len(d.images) > 5:
         raise HTTPException(400, "Cada producto admite hasta 5 imágenes.")
-    if any(not IMG_URL.match(i) and (len(i) > 450_000 or not IMG.match(i)) for i in d.images):
+    if any(not IMG_URL.match(i) and not image_store.is_ours(i) and (len(i) > 450_000 or not IMG.match(i)) for i in d.images):
         raise HTTPException(400, "Las imágenes deben ser PNG, JPG o WebP y pesar menos de 450 KB cada una.")
 
 IMG_URL = re.compile(r"^/api/img/(\d+)/(\d+)\?v=[0-9a-f]{0,12}$")
+log_img = logging.getLogger("affari.images")
+
+def store_images(imgs, sid):
+    """Fotos nuevas (data URL) -> WebP en Supabase Storage. En la base solo queda la URL pública (nunca base64 nuevo)."""
+    try:
+        return image_store.persist_images(imgs, f"products/{sid}")
+    except image_store.ImageStoreError as e:
+        log_img.warning("producto: %s", e)
+        raise HTTPException(502, "No pudimos guardar las fotos. Probá de nuevo en un momento.")
+
+# Productos ya migrados guardan una lista chica de URLs: se lee directo (el base64 viejo nunca se trae en los listados).
+IMG_URLS_SQL = "CASE WHEN substr(images,1,6)='[\"http' THEN images END AS img_urls"
+
+def product_images(r):
+    """Fotos de un producto para el navegador: URL pública de Supabase tal cual (la sirve su CDN) o, si aún es base64, /api/img."""
+    urls = parse_images(r["img_urls"]) if r["img_urls"] else []
+    if urls:
+        return [u if isinstance(u, str) and u.startswith("http") else img_url(r["id"], i, r["img_v"]) for i, u in enumerate(urls)]
+    return [img_url(r["id"], i, r["img_v"]) for i in range(r["img_n"])]
 
 _JUNK = re.compile(r"^\$(undefined|null|nan)$", re.I)
 def clean_text(t):
@@ -553,9 +581,9 @@ def _warm_now(pid, imgs):
 def list_products(u=Depends(current_user)):
     _warm_store(u["store_id"])                      # si a algún producto le faltan miniaturas, se preparan en segundo plano
     with db.conn() as c:
-        rows = c.execute("SELECT id,store_id,name,description,price,cost,stock,min_stock,active,category,img_n,img_v FROM products WHERE store_id=? ORDER BY name COLLATE NOCASE", (u["store_id"],)).fetchall()
-        out = ops.attach_variants(c, [clean_product({**{k: v for k, v in dict(r).items() if k not in ("img_n", "img_v")}, "active": bool(r["active"]),
-                                       "images": [img_url(r["id"], i, r["img_v"]) for i in range(r["img_n"])]}) for r in rows])
+        rows = c.execute(f"SELECT id,store_id,name,description,price,cost,stock,min_stock,active,category,img_n,img_v,{IMG_URLS_SQL} FROM products WHERE store_id=? ORDER BY name COLLATE NOCASE", (u["store_id"],)).fetchall()
+        out = ops.attach_variants(c, [clean_product({**{k: v for k, v in dict(r).items() if k not in ("img_n", "img_v", "img_urls")}, "active": bool(r["active"]),
+                                       "images": product_images(r)}) for r in rows])
     return out
 
 _THUMBS = {}                      # (pid, i, v, w) -> (bytes, mime); caché chica en memoria para no reescalar la misma foto cada vez
@@ -642,7 +670,7 @@ def _warm_later(pid, v, delay=3):
         except Exception: pass
     t = threading.Timer(delay, run); t.daemon = True; t.start()
 
-_MISSING = "SELECT p.id, p.img_v FROM products p WHERE p.img_n>0 AND NOT EXISTS (SELECT 1 FROM product_thumbs t WHERE t.product_id=p.id AND t.v=p.img_v)"
+_MISSING = "SELECT p.id, p.img_v FROM products p WHERE p.img_n>0 AND substr(p.images,1,6) <> '[\"http' AND NOT EXISTS (SELECT 1 FROM product_thumbs t WHERE t.product_id=p.id AND t.v=p.img_v)"
 
 def _warm_rows(rows):
     """Prepara la foto principal de varios productos en paralelo (3 a la vez)."""
@@ -727,6 +755,8 @@ def product_image(pid: int, i: int, v: str = "", w: int = 0):
     cur_v, src = _current_image(pid, i)
     if src is None:
         raise HTTPException(404, "Imagen inexistente.")
+    if image_store.is_ours(src):                             # ya está en Supabase Storage (listas viejas del navegador): se manda a su CDN
+        return RedirectResponse(src, status_code=302, headers={"Cache-Control": "public, max-age=86400"})
     if v != cur_v:                                           # la lista del navegador quedó vieja: se lo manda a la versión actual
         return RedirectResponse(f"/api/img/{pid}/{i}?v={cur_v}" + (f"&w={w}" if thumb else ""), status_code=307, headers={"Cache-Control": "no-store"})
     m = _DATA_RE.match(src)
@@ -770,7 +800,7 @@ def thumbs_batch(k: str = ""):
 @app.post("/api/products")
 def create_product(d: ProductIn, u=Depends(current_user)):
     check_product(d)
-    imgs = [i for i in d.images if not IMG_URL.match(i)]
+    imgs = store_images([i for i in d.images if not IMG_URL.match(i)], u["store_id"])
     with db.conn() as c:
         billing.check_product_limit(c, u)         # plan gratis: hasta 50 productos
         pid = c.execute("INSERT INTO products(store_id,name,description,price,cost,stock,min_stock,active,category,images) VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -784,6 +814,8 @@ def update_product(pid: int, d: ProductIn, u=Depends(current_user)):
     check_product(d)
     with db.conn() as c:
         imgs = resolve_images(c, u["store_id"], pid, d.images)
+    imgs = store_images(imgs, u["store_id"])           # sube las nuevas (y las viejas en base64, si quedaban) fuera de la transacción
+    with db.conn() as c:
         n = c.execute("UPDATE products SET name=?,description=?,price=?,cost=?,stock=?,min_stock=?,active=?,category=?,images=? WHERE id=? AND store_id=?",
                       (d.name.strip(), d.description.strip(), d.price, d.cost, d.stock, d.min_stock, int(d.active), d.category.strip()[:40], json.dumps(imgs), pid, u["store_id"])).rowcount
         if n:
@@ -849,11 +881,11 @@ def public_catalog(slug: str):
         ob = billing.owner_access(c, s["id"])
         if not ob or not billing.allows(ob, "catalog"):
             raise HTTPException(404, "Este catálogo no está disponible por ahora.")      # dueño en plan gratis: el catálogo público se apaga
-        prods = c.execute("SELECT id,name,description,price,stock,category,img_n,img_v FROM products WHERE store_id=? AND active=1 ORDER BY name COLLATE NOCASE", (s["id"],)).fetchall()
+        prods = c.execute(f"SELECT id,name,description,price,stock,category,img_n,img_v,{IMG_URLS_SQL} FROM products WHERE store_id=? AND active=1 ORDER BY name COLLATE NOCASE", (s["id"],)).fetchall()
     _warm_store(s["id"])
     return {"server_now": int(time.time() * 1000),        # hora del servidor: el navegador corrige un reloj mal puesto al calcular «Abierto ahora»
             "store": {"name": s["name"], "type": s["type"], "phone": s["phone"], "logo": s["logo"], "hours": hrs.parse_hours(s["hours"]), "theme": theme_view(parse_theme(s["theme"]), s["id"])},
-            "products": [clean_product({**{k: v for k, v in dict(p).items() if k not in ("img_n", "img_v")}, "images": [img_url(p["id"], i, p["img_v"]) for i in range(p["img_n"])]}) for p in prods]}
+            "products": [clean_product({**{k: v for k, v in dict(p).items() if k not in ("img_n", "img_v", "img_urls")}, "images": product_images(p)}) for p in prods]}
 
 @app.get("/api/media/{sid}/{key}")
 def store_media(sid: int, key: str, v: str = ""):
@@ -867,6 +899,8 @@ def store_media(sid: int, key: str, v: str = ""):
         m = re.match(r"^p(\d)$", key)
         ps = th.get("promos") or []
         data = ps[int(m.group(1))] if m and int(m.group(1)) < len(ps) else None
+    if image_store.is_ours(data):                            # banner/portada/fondo ya en Supabase Storage (cliente con versión vieja)
+        return RedirectResponse(data, status_code=302, headers={"Cache-Control": "public, max-age=86400"})
     m = re.match(r"^data:(image/[a-z]+);base64,(.+)$", data or "", re.S)
     if not m:
         raise HTTPException(404, "Imagen inexistente.")

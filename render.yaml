@@ -27,6 +27,12 @@ services:
         sync: false
       - key: CF_API_TOKEN         # token de API con permiso "Workers AI"
         sync: false
+      - key: SUPABASE_URL          # https://<ref>.supabase.co  (imágenes en Supabase Storage)
+        sync: false
+      - key: SUPABASE_SERVICE_KEY  # service_role / sb_secret_...: SOLO backend
+        sync: false
+      - key: SUPABASE_BUCKET       # product-images (bucket público)
+        value: product-images
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: ADMIN_VIP_EMAILS

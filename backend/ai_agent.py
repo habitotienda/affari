@@ -14,6 +14,7 @@ from pydantic import BaseModel
 import database as db
 import operations as ops
 import reports
+import image_store
 import ai_keys as gk
 
 log = logging.getLogger("affari.ai")
@@ -109,6 +110,13 @@ def _for_model(img):
     except Exception:
         return img
 
+def _store(images, sid):
+    """Fotos adjuntas en el chat (data URL) -> WebP en Supabase Storage; en la base queda solo la URL."""
+    try:
+        return image_store.persist_images(images, f"products/{sid}")
+    except image_store.ImageStoreError:
+        raise ToolError("No pude guardar las fotos en este momento. Probá de nuevo en un rato.")
+
 def _pick(imgs, idxs):
     out = []
     for i in idxs or []:
@@ -146,7 +154,7 @@ def t_create_product(c, sid, a, imgs):
     cost = _num(a["cost"], "cost") if a.get("cost") is not None else 0
     stock = _int(a.get("stock", 0), "stock")
     min_stock = _int(a["min_stock"], "min_stock") if a.get("min_stock") is not None else 5
-    images = _pick(imgs, a.get("image_indexes"))
+    images = _store(_pick(imgs, a.get("image_indexes")), sid)
     active = price > 0                                   # sin precio no se publica en el catálogo
     pid = c.execute("INSERT INTO products(store_id,name,description,price,cost,stock,min_stock,active,category,images) VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (sid, name, str(a.get("description") or "").strip()[:600], price, cost, stock, min_stock, int(active),
@@ -185,7 +193,7 @@ def t_update_product(c, sid, a, imgs):
             sets.append(f"{key}=?"); args.append(val); changed.append(key)
     if a.get("active") is not None:
         sets.append("active=?"); args.append(int(bool(a["active"]))); changed.append("active")
-    new_imgs = _pick(imgs, a.get("add_image_indexes"))
+    new_imgs = _store(_pick(imgs, a.get("add_image_indexes")), sid)
     saved = 0
     if new_imgs:
         try:
@@ -411,6 +419,9 @@ def make_router(current_user):
         m = IMG_LOCAL.match(image)                       # foto que el formulario ya tenía guardada: se toma de la base
         if m:
             image = stored[int(m.group(2))] if d.product_id is not None and int(m.group(1)) == d.product_id and int(m.group(2)) < len(stored) else ""
+        if image and image_store.is_ours(image):         # foto en Supabase Storage: se baja para dársela a la IA
+            try: image = image_store.fetch_data_url(image)
+            except image_store.ImageStoreError: image = ""
         if image and (len(image) > 600_000 or not IMG.match(image)):
             image = ""                                   # foto inválida o muy pesada: se describe solo por el nombre
         if not name:

@@ -13,6 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 import database as db
+import image_store
 import ai_keys as gk
 import ai_agent as ag
 
@@ -215,6 +216,9 @@ def make_router(current_user):
             try: stored = json.loads(r["images"] or "[]") if r else []
             except ValueError: stored = []
             image = stored[int(m.group(2))] if r and int(m.group(1)) == d.product_id and int(m.group(2)) < len(stored) else ""
+        if image and image_store.is_ours(image):             # foto en Supabase Storage: se baja para dársela a la IA
+            try: image = image_store.fetch_data_url(image)
+            except image_store.ImageStoreError: image = ""
         if not image or len(image) > 600_000 or not ag.IMG.match(image):
             raise HTTPException(400, "No pudimos leer esa foto. Subila de nuevo.")
         try:

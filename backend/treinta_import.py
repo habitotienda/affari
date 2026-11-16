@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 import database as db
+import image_store
 from ai_agent import rate_ok                      # mismo limitador que usa el asistente
 from treinta_scraper import (ScrapeError, fetch_image_as_data_uri, parse_price, scrape_store,
                              NAME_MAX, DESC_MAX, CAT_MAX, MAX_IMGS_PER_PRODUCT)
@@ -104,8 +105,15 @@ def make_router(current_user):
 
         items = [x for x in (_clean(i) for i in d.products) if x]
         # fotos en paralelo y fuera de la transacción: no se retiene la base mientras se descarga
+        def fetch(x):
+            imgs, bad = _download(x["urls"])
+            try:
+                return image_store.persist_images(imgs, f"products/{sid}"), bad       # base64 -> WebP en Supabase; en la base solo la URL
+            except image_store.ImageStoreError as e:
+                log.warning("treinta: fotos no guardadas: %s", e)
+                return [], bad + len(imgs)
         with ThreadPoolExecutor(max_workers=4) as pool:
-            results = list(pool.map(lambda x: _download(x["urls"]), items))
+            results = list(pool.map(fetch, items))
 
         created = skipped = img_failed = 0
         with db.conn() as c:
