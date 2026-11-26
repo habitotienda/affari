@@ -19,7 +19,8 @@ r2 = lambda x: round(float(x or 0), 2)
 
 # ---------------------------------------------------------------- helpers compartidos con app.py
 _SALE_COLS = ("s.id,s.kind,s.concept,s.amount,s.method,s.is_payment,s.supplier_id,s.created_at,s.ticket,s.ticket_concept,"
-              "s.product_id,s.product_name,s.variant_name,s.qty,cl.name AS client_name,p.img_n AS img_n,p.img_v AS img_v")
+              "s.product_id,s.product_name,s.variant_name,s.qty,cl.name AS client_name,p.img_n AS img_n,p.img_v AS img_v,"
+              "s.voided_at,s.void_reason,s.edited_at,s.invoice_id,s.client_id")
 
 def grouped_sales(c, sid, where="", params=(), limit=100):
     """Movimientos de caja, más nuevos primero. Los productos vendidos juntos (misma `ticket`) vuelven como UNA sola fila
@@ -37,20 +38,24 @@ def grouped_sales(c, sid, where="", params=(), limit=100):
     for r in rows:
         tk, client = r["ticket"], r.get("client_name") or ""
         if not tk:
-            out.append({k: r[k] for k in ("id", "kind", "concept", "amount", "method", "is_payment", "supplier_id", "created_at")}); continue
+            out.append({k: r[k] for k in ("id", "kind", "concept", "amount", "method", "is_payment", "supplier_id", "created_at", "client_id", "product_id",
+                                          "product_name", "variant_name", "qty", "voided_at", "void_reason", "edited_at", "invoice_id")}); continue
         img = f"/api/img/{r['product_id']}/0?v={r['img_v']}" if r.get("img_n") and r.get("product_id") else ""
         item = {"name": r["product_name"] or r["concept"], "variant": r["variant_name"] or "", "qty": r["qty"], "amount": r["amount"], "img": img}
         if tk in groups:
             g = groups[tk]; g["items"].insert(0, item); g["amount"] = round(g["amount"] + r["amount"], 2); continue
         g = {"id": r["id"], "kind": r["kind"], "concept": r["concept"], "amount": r["amount"], "method": r["method"], "is_payment": r["is_payment"],
-             "supplier_id": r["supplier_id"], "created_at": r["created_at"], "items": [item], "_title": r["ticket_concept"] or "", "_client": client}
+             "supplier_id": r["supplier_id"], "created_at": r["created_at"], "items": [item], "_title": r["ticket_concept"] or "", "_client": client,
+             "client_id": r["client_id"], "voided_at": r["voided_at"], "void_reason": r["void_reason"], "edited_at": r["edited_at"], "invoice_id": r["invoice_id"]}
         groups[tk] = g; out.append(g)
     for g in out:
+        g["locked"] = "comprobante" if g.get("invoice_id") else "proveedor" if g.get("supplier_id") else ""     # no se corrigen desde Caja (movements.py)
         if "items" not in g: continue
         title, client = g.pop("_title"), g.pop("_client")
         n = len(g["items"])
         if n < 2:                                          # una venta de un solo producto se ve como siempre
             g.pop("items"); continue
+        g["title"] = title                                 # nombre que le puso el usuario (editable desde Caja)
         label = title or f"Venta de {n} productos"
         g["concept"] = f"Fiado: {client} · {label}" if g["kind"] == "fiado" and client else label
         g["units"] = sum(i["qty"] for i in g["items"])
@@ -351,7 +356,7 @@ def make_router(current_user):
         today = date.today().isoformat()
         with db.conn() as c:
             recv = [dict(r) for r in c.execute("""SELECT cl.id, cl.name, cl.phone, cl.balance, MAX(s.created_at) AS last_move
-                       FROM clients cl LEFT JOIN sales s ON s.client_id=cl.id WHERE cl.store_id=? AND cl.balance>0 GROUP BY cl.id ORDER BY cl.balance DESC""", (u["store_id"],))]
+                       FROM clients cl LEFT JOIN sales s ON s.client_id=cl.id AND s.voided_at IS NULL WHERE cl.store_id=? AND cl.balance>0 GROUP BY cl.id ORDER BY cl.balance DESC""", (u["store_id"],))]
             for x in recv:                      # días sin movimientos (calculado en Python: igual en SQLite y Postgres)
                 x["days"] = (date.today() - date.fromisoformat(x["last_move"][:10])).days if x["last_move"] else 0
             pay = [dict(r) for r in c.execute("""SELECT s.id, s.name, s.phone, s.balance,
@@ -371,14 +376,14 @@ def make_router(current_user):
         with db.conn() as c:
             methods = []
             for m in PAY_METHODS:
-                opening = c.execute(f"SELECT {net} FROM sales WHERE store_id=? AND method=? AND date(created_at) < ?", (sid, m, day)).fetchone()[0]
-                r = c.execute("SELECT SUM(CASE WHEN kind='entrada' THEN amount END) i, SUM(CASE WHEN kind='salida' THEN amount END) o FROM sales WHERE store_id=? AND method=? AND date(created_at)=?", (sid, m, day)).fetchone()
+                opening = c.execute(f"SELECT {net} FROM sales WHERE store_id=? AND method=? AND date(created_at) < ? AND voided_at IS NULL", (sid, m, day)).fetchone()[0]
+                r = c.execute("SELECT SUM(CASE WHEN kind='entrada' THEN amount END) i, SUM(CASE WHEN kind='salida' THEN amount END) o FROM sales WHERE store_id=? AND method=? AND date(created_at)=? AND voided_at IS NULL", (sid, m, day)).fetchone()
                 methods.append({"method": m, "opening": r2(opening), "inflow": r2(r["i"]), "outflow": r2(r["o"]), "closing": r2((opening or 0) + (r["i"] or 0) - (r["o"] or 0))})
             t = c.execute(f"""SELECT SUM(CASE WHEN {SALE} THEN amount END) sales, COUNT(CASE WHEN {SALE} THEN 1 END) n,
                        SUM(CASE WHEN kind='fiado' THEN amount END) fiado, SUM(CASE WHEN is_payment=1 THEN amount END) cobros,
                        SUM(CASE WHEN kind='salida' AND supplier_id IS NULL THEN amount END) gastos,
                        SUM(CASE WHEN kind='salida' AND supplier_id IS NOT NULL THEN amount END) proveedores
-                       FROM sales WHERE store_id=? AND date(created_at)=?""", (sid, day)).fetchone()
+                       FROM sales WHERE store_id=? AND date(created_at)=? AND voided_at IS NULL""", (sid, day)).fetchone()
             moves = grouped_sales(c, sid, "AND date(s.created_at)=? ", (day,), 300)
             closure = c.execute("SELECT day,expected,counted,diff,notes,created_at FROM cash_closures WHERE store_id=? AND day=?", (sid, day)).fetchone()
             recv = c.execute("SELECT SUM(balance) FROM clients WHERE store_id=?", (sid,)).fetchone()[0]

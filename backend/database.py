@@ -168,6 +168,8 @@ MIGRATIONS = [
     ("stores", "hours", "TEXT"), ("users", "google_sub", "TEXT"),
     # Ventas con varios productos: todas las filas de una misma venta comparten `ticket` (y el nombre que se le puso)
     ("sales", "ticket", "TEXT"), ("sales", "ticket_concept", "TEXT"),
+    # Corrección de movimientos: anulado (fecha, NULL = vigente), motivo y última edición. Ver movements.py
+    ("sales", "voided_at", "TEXT"), ("sales", "void_reason", "TEXT"), ("sales", "edited_at", "TEXT"),
 ]
 
 def img_meta(images):

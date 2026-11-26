@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import database as db
 import auth_handler as auth
-import reports, exporters, operations as ops, ai_agent, cf_images, hours as hrs, google_auth, billing, treinta_import, image_store
+import reports, exporters, operations as ops, movements, ai_agent, cf_images, hours as hrs, google_auth, billing, treinta_import, image_store
 
 load_dotenv()
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -341,7 +341,7 @@ def dashboard(u=Depends(current_user)):
                                  {flow('Efectivo')}, {flow('Transferencia')}, {flow('Tarjeta')}, SUM(CASE WHEN {sale} THEN amount-cost ELSE 0 END),
                                  (SELECT SUM(balance) FROM clients WHERE store_id=?), (SELECT COUNT(*) FROM clients WHERE store_id=? AND balance>0),
                                  (SELECT SUM(balance) FROM suppliers WHERE store_id=?)
-                          FROM sales WHERE store_id=?""", (sid, sid, sid, sid)).fetchone()
+                          FROM sales WHERE store_id=? AND voided_at IS NULL""", (sid, sid, sid, sid)).fetchone()
         moves = recent_sales(c, sid, 8)
         low = ops.low_stock(c, sid, 6)
     n = lambda v: v or 0
@@ -457,7 +457,7 @@ def add_cart_sale(d: CartSaleIn, u=Depends(current_user)):
 def list_clients(u=Depends(current_user)):
     with db.conn() as c:
         rows = c.execute("""SELECT cl.id, cl.name, cl.phone, cl.balance, cl.email, cl.cuit, cl.address, cl.notes,
-                            (SELECT MAX(created_at) FROM sales s WHERE s.client_id = cl.id) AS last_move
+                            (SELECT MAX(created_at) FROM sales s WHERE s.client_id = cl.id AND s.voided_at IS NULL) AS last_move
                             FROM clients cl WHERE cl.store_id=? ORDER BY cl.balance DESC, cl.name""", (u["store_id"],)).fetchall()
     return [dict(r) for r in rows]
 
@@ -917,6 +917,7 @@ def public_qr(slug: str, request: Request):
 
 app.include_router(google_auth.make_router(load_user, public_user))   # inicio de sesión con Google + /api/config
 app.include_router(ops.make_router(current_user))     # parte 5: variantes, proveedores, deudas, caja, comprobantes
+app.include_router(movements.make_router(current_user))  # corregir entradas y salidas: editar, anular y restaurar
 app.include_router(billing.make_router(current_user, forget_user, db))   # planes, checkout y webhook de Mercado Pago
 app.include_router(ai_agent.make_router(current_user))  # asistente IA (Gemini / Groq)
 app.include_router(cf_images.make_router(current_user))  # fotos de producto con IA (Cloudflare Workers AI)

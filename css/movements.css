@@ -1,0 +1,15 @@
+/* Corregir entradas y salidas: marcas «Anulado» / «Editado», botones de fila y modales (js/movements.js) */
+.void-chip,.edit-chip{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;text-decoration:none}
+.void-chip{background:var(--danger-soft);color:var(--danger)}
+.edit-chip{background:var(--bg);border:1px solid var(--border);color:var(--muted);font-weight:600}
+tr.mv-void td{color:var(--muted)}
+tr.mv-void td:first-child,tr.mv-void td.num{text-decoration:line-through}      /* fecha y monto tachados; el concepto queda legible y los botones sin tachar */
+td.mv-act{width:1%;white-space:nowrap}
+.mv-lock{display:inline-flex;align-items:center;justify-content:flex-end;padding:6px;color:var(--muted)}
+.mv-hint{margin:-4px 0 14px;font-size:13px}
+.mv-what{display:grid;gap:2px;margin:0 0 10px;overflow-wrap:anywhere}.mv-what span{color:var(--muted);font-size:13px}
+.mv-fx{margin:0 0 16px;padding-left:20px;display:grid;gap:4px;font-size:14px}
+.mv-act .act{flex-wrap:nowrap}
+.mv-inline{display:none;margin-top:8px}.mv-inline .act{justify-content:flex-start}
+@media(max-width:760px){.mv-inline{display:block}.mv-col{display:none}}
+.btn-primary.mv-danger{background:var(--danger);border-color:var(--danger);color:#fff}

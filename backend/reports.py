@@ -10,7 +10,7 @@ Definiciones (iguales en pantalla, Excel y PDF):
 from datetime import date, timedelta
 
 SALE = "kind IN ('entrada','fiado') AND is_payment=0"
-IN_RANGE = "store_id=? AND date(created_at) BETWEEN ? AND ?"
+IN_RANGE = "store_id=? AND date(created_at) BETWEEN ? AND ? AND voided_at IS NULL"      # los movimientos anulados no cuentan
 MAX_DAYS = 731
 
 def parse_range(date_from, date_to):
@@ -63,7 +63,7 @@ def build(c, sid, d1, d2):
                  "profit": _r((r["revenue"] or 0) - (r["cost"] or 0))}
                 for r in c.execute(f"""SELECT MIN(COALESCE(p.name, s.product_name)) name, SUM(s.qty) units, SUM(s.amount) revenue, SUM(s.cost) cost
                 FROM sales s LEFT JOIN products p ON p.id = s.product_id
-                WHERE s.store_id=? AND date(s.created_at) BETWEEN ? AND ? AND {SALE} AND s.qty > 0
+                WHERE s.store_id=? AND date(s.created_at) BETWEEN ? AND ? AND s.voided_at IS NULL AND {SALE} AND s.qty > 0
                 GROUP BY COALESCE(CAST(s.product_id AS TEXT), s.product_name) ORDER BY units DESC, revenue DESC LIMIT 50""", args)]
     loose = c.execute(f"SELECT COUNT(*) n, SUM(amount) a FROM sales WHERE {IN_RANGE} AND {SALE} AND qty=0", args).fetchone()
 

@@ -110,8 +110,20 @@ backend/
   migrate_to_supabase.py      copia una affari.db a Supabase
 css/ ops.css        estilos de la parte 5
 js/  ops.js         clientes, proveedores, deudas, flujo de caja
+     movements.js   editar / anular / restaurar movimientos de caja (backend/movements.py)
      ops-docs.js    inventario con variantes, comprobantes, datos fiscales
 ```
+
+## Corregir entradas y salidas (editar y anular)
+En **Caja y Ventas** y en el detalle de **Flujo de caja**, cada movimiento tiene **Editar** y **Anular** (en celular los botones salen debajo del concepto). Sirve para un error de carga o un pedido cancelado, sin tocar la base a mano.
+- **Anular** no borra: el movimiento queda en el historial marcado «Anulado» (con el motivo), tachado, y se puede **Restaurar**. Un anulado no suma en caja, flujo de caja, estadísticas, reportes ni Excel/PDF.
+  Efectos al anular: la venta con producto **devuelve el stock** (también el de su variante); un **fiado** descuenta esa deuda del cliente; el **cobro de un fiado** hace que el cliente vuelva a deber ese monto. Al restaurar se revierte todo (y si ya no alcanza el stock o la deuda, avisa y no cambia nada).
+- **Editar**: concepto, monto, medio de pago, fecha y, en ventas con producto, **cantidad** (ajusta stock y costo). Un gasto o ingreso sin producto también se puede pasar de **entrada a salida** (o al revés). Cambiar el monto de un fiado o de un cobro ajusta lo que debe el cliente. Una venta con varios productos se anula entera; de ella solo se edita el nombre, el medio y la fecha (para otro monto o cantidad: anular y cargarla de nuevo).
+- **No se tocan desde acá** (aparece un candado): los movimientos de un **comprobante** (se anula desde Comprobantes) y los **pagos a proveedores** (también mueven su cuenta corriente).
+- Si el día corregido ya tenía **cierre de caja**, la app avisa: el cierre guardado no se recalcula y conviene revisarlo en Flujo de caja.
+- Todo ocurre en una sola transacción: si algo falla (p. ej. stock insuficiente al subir la cantidad) no se cambia nada. Cada negocio solo puede corregir sus propios movimientos.
+Código: `backend/movements.py` (`PUT /api/sales/{id}`, `POST /api/sales/{id}/void`, `POST /api/sales/{id}/restore`) · `js/movements.js` + `css/movements.css` · columnas nuevas `sales.voided_at`, `void_reason`, `edited_at` (migración automática) · los filtros `voided_at IS NULL` están en `reports.py` (`IN_RANGE`), `operations.py` (flujo de caja y deudas) y `app.py` (dashboard).
+**Si agregás un cálculo nuevo sobre `sales`, acordate de excluir `voided_at IS NOT NULL`.** Pruebas: `python tests/movements_test.py` · `node tests/js/movements.test.js`.
 
 ## Parte 5: qué incluye
 | Módulo | Dónde |

@@ -4,8 +4,12 @@ const when = s => new Date(String(s).replace(' ', 'T')).toLocaleString('es-AR', 
 const KIND = { entrada: 'Entrada', salida: 'Salida', fiado: 'Fiado' };
 
 /* Venta con varios productos: en las listas es UNA sola fila (m.items trae el detalle); al tocarla se abre «Esta venta tuvo…» */
-const tkAttr = (m, ix) => m.items ? ` class="tk-row" data-tk="${ix}" tabindex="0" role="button" aria-label="Ver los productos de esta venta"` : '';
-const tkChip = m => m.items ? `<span class="tk-n">${m.items.length} productos ›</span>` : '';
+const tkAttr = (m, ix) => {
+  const cls = [m.items ? 'tk-row' : '', m.voided_at ? 'mv-void' : ''].filter(Boolean).join(' ');     // «mv-void»: movimiento anulado (gris, fecha y monto tachados)
+  return (cls ? ` class="${cls}"` : '') + (m.items ? ` data-tk="${ix}" tabindex="0" role="button" aria-label="Ver los productos de esta venta"` : '');
+};
+const tkChip = m => (m.items ? `<span class="tk-n">${m.items.length} productos ›</span>` : '')
+  + (m.voided_at ? `<span class="void-chip" title="${esc(m.void_reason ? 'Motivo: ' + m.void_reason : 'Anulado')}">Anulado</span>` : m.edited_at ? `<span class="edit-chip" title="Corregido el ${esc(String(m.edited_at).slice(0, 16))}">Editado</span>` : '');
 const tkThumb = i => `<div class="tk-th">${i.img ? `<img src="${esc(sfThumb(i.img, 160))}" alt="" decoding="async">` : esc(((i.name || '?')[0] || '?').toUpperCase())}</div>`;
 function bindTickets(el, list) {
   el.querySelectorAll('[data-tk]').forEach(r => {
@@ -363,8 +367,8 @@ const VIEWS = {
       <div class="card kpi"><span>Efectivo en caja hoy</span><strong>${ars(k.cash)}</strong><small>Entradas menos salidas</small></div>
       <div class="card kpi"><span>Transferencias hoy</span><strong>${ars(k.transfer)}</strong><small>Entradas menos salidas</small></div>
       <div class="card kpi"><span>Tarjeta hoy</span><strong>${ars(k.card)}</strong><small>Débito y crédito</small></div></section>
-      <div class="card tbl-wrap">${list.length ? `<table><thead><tr><th>Fecha</th><th>Concepto</th><th>Tipo</th><th>Medio</th><th class="num">Monto</th></tr></thead><tbody>${list.map((m, ix) => `<tr${tkAttr(m, ix)}><td class="muted">${when(m.created_at)}</td><td>${esc(m.concept)}${tkChip(m)}</td><td><span class="badge b-${m.kind}">${m.is_payment ? 'Cobro' : KIND[m.kind]}</span></td><td>${esc(m.method)}</td><td class="num ${m.kind === 'salida' ? 'neg' : ''}">${m.kind === 'salida' ? '−' : ''}${ars(m.amount)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Todavía no hay movimientos. Registrá tu primera venta.</div>'}</div>`;
-    bindTickets(el, list);
+      <div class="card tbl-wrap">${list.length ? `<table><thead><tr><th>Fecha</th><th>Concepto</th><th>Tipo</th><th>Medio</th><th class="num">Monto</th><th class="mv-col"><span class="sr-only">Corregir</span></th></tr></thead><tbody>${list.map((m, ix) => `<tr${tkAttr(m, ix)}><td class="muted">${when(m.created_at)}</td><td>${esc(m.concept)}${tkChip(m)}${mvInline(m, ix)}</td><td><span class="badge b-${m.kind}">${m.is_payment ? 'Cobro' : KIND[m.kind]}</span></td><td>${esc(m.method)}</td><td class="num ${m.kind === 'salida' ? 'neg' : ''}">${m.kind === 'salida' ? '−' : ''}${ars(m.amount)}</td><td class="mv-act mv-col">${mvActions(m, ix)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Todavía no hay movimientos. Registrá tu primera venta.</div>'}</div>`;
+    bindTickets(el, list); bindMoveActions(el, list);
     el.querySelector('[data-sale]').onclick = () => openSaleModal(); el.querySelector('[data-exp]').onclick = () => openSaleModal('salida');
   },
   async fiados(el) {
