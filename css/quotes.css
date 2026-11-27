@@ -1,0 +1,7 @@
+/* Presupuestos (js/quotes.js). El armado reutiliza los estilos .sv-* de sale-flow.css */
+.q-list ul{list-style:none;margin:0;padding:0}
+.q-row{padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer}.q-row:last-child{border-bottom:0}.q-row:hover{background:var(--bg)}
+.q-row:focus-visible{outline:2px solid var(--primary-2);outline-offset:-2px}
+.q-top{display:flex;justify-content:space-between;gap:10px}.q-top strong{overflow-wrap:anywhere}.q-top b{white-space:nowrap}
+.q-sub{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:13px;margin-top:3px}
+.q-st{font-weight:700;white-space:nowrap}.q-st.pendiente{color:var(--warn)}.q-st.aceptado{color:var(--primary)}.q-st.rechazado,.q-st.exp{color:var(--danger)}

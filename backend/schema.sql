@@ -164,3 +164,24 @@ CREATE TABLE IF NOT EXISTS product_thumbs (
   data TEXT NOT NULL,
   PRIMARY KEY (product_id, idx, w)
 );
+
+-- ===== Presupuestos =====
+-- Cotizaciones para mandar al cliente (no mueven stock ni caja). items = JSON [{name, qty, unit, product_id}].
+CREATE TABLE IF NOT EXISTS quotes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  number INTEGER NOT NULL,
+  client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+  client_name TEXT NOT NULL DEFAULT '',
+  client_phone TEXT NOT NULL DEFAULT '',
+  items TEXT NOT NULL DEFAULT '[]',
+  subtotal REAL NOT NULL DEFAULT 0,
+  discount REAL NOT NULL DEFAULT 0,
+  total REAL NOT NULL DEFAULT 0,
+  valid_until TEXT,
+  note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pendiente' CHECK (status IN ('pendiente','aceptado','rechazado')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+  UNIQUE(store_id, number)
+);
+CREATE INDEX IF NOT EXISTS idx_quotes_store ON quotes(store_id, id);

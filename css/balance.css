@@ -1,0 +1,34 @@
+/* Balance mensual (js/balance.js) */
+.bl-months{display:flex;align-items:center;gap:6px;margin:0 0 14px;overflow-x:auto;padding-bottom:2px}
+.bl-months button{flex:0 0 auto;padding:8px 14px;border:1px solid var(--border);border-radius:999px;background:var(--card);font-weight:600;text-transform:capitalize;cursor:pointer}
+.bl-months button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.bl-cal{position:relative;flex:0 0 auto;margin-left:auto;display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--border);border-radius:999px;background:var(--card);cursor:pointer;color:var(--ink)}
+.bl-cal input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.bl-cal input::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
+.bl-sum{padding:18px;margin-bottom:14px}
+.bl-bal{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}.bl-bal span{color:var(--muted)}.bl-bal strong{font-size:26px;font-weight:800}.bl-bal strong.neg{color:var(--danger)}
+.bl-io{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0;padding-top:14px;border-top:1px solid var(--border)}
+.bl-io span{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:14px}.bl-io b{display:block;font-size:20px;margin-top:4px}
+.bl-io .in svg{color:var(--primary)}.bl-io .out svg{color:var(--danger);transform:scaleY(-1)}
+.bl-links{display:flex;justify-content:space-between;gap:10px}
+.bl-link{background:none;border:0;padding:4px 0;color:var(--ink);text-decoration:underline;font-weight:600;cursor:pointer}.bl-link.go{color:#2563EB}.bl-link:disabled{opacity:.5}
+.bl-tabs{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--border);margin-bottom:10px}
+.bl-tabs button{padding:12px;background:none;border:0;border-bottom:3px solid transparent;font-weight:700;color:var(--muted);cursor:pointer}.bl-tabs button.on{color:var(--ink);border-bottom-color:var(--ink)}
+.bl-list ul{list-style:none;margin:0;padding:0}
+.bl-row{display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)}.bl-row:last-child{border-bottom:0}.bl-row.tk-row{cursor:pointer}
+.bl-ico{flex:0 0 40px;height:40px;border-radius:50%;display:grid;place-items:center}
+.bl-row.in .bl-ico{background:var(--primary-soft);color:var(--primary)}.bl-row.out .bl-ico{background:var(--danger-soft);color:var(--danger)}
+.bl-main{flex:1;min-width:0}
+.bl-top{display:flex;justify-content:space-between;gap:10px}.bl-top strong{overflow-wrap:anywhere}.bl-top b{white-space:nowrap}
+.bl-sub{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:13px;margin-top:2px}
+.bl-st{font-weight:700;white-space:nowrap}.bl-st.in{color:var(--primary)}.bl-st.out{color:var(--danger)}.bl-st.void{color:var(--muted)}
+.bl-row.gone .bl-top strong,.bl-row.gone .bl-top b{text-decoration:line-through;color:var(--muted)}
+.bl-act{margin-top:8px}.bl-act .act{justify-content:flex-start}
+.bl-prof{padding:18px;margin-bottom:12px}.bl-prof dl{display:grid;grid-template-columns:1fr auto;gap:8px 12px;margin:12px 0}.bl-prof dd{margin:0;text-align:right}.bl-prof .out{color:var(--danger)}
+.bl-est{display:flex;justify-content:space-between;align-items:baseline;gap:10px;border-top:1px solid var(--border);padding-top:12px;margin-top:6px}.bl-est strong{font-size:20px}.bl-est strong.neg{color:var(--danger)}
+.bl-meths{display:grid;gap:10px}.bl-m{padding:0}
+.bl-m summary{display:flex;justify-content:space-between;gap:10px;padding:16px 18px;cursor:pointer;list-style:none;font-size:16px}.bl-m summary::-webkit-details-marker{display:none}.bl-m summary span{font-weight:800}.bl-m summary span.neg{color:var(--danger)}
+.bl-m[open] summary{border-bottom:1px solid var(--border)}
+.bl-m-in{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px 18px}.bl-m-in span{display:block;color:var(--muted);font-size:13px}
+.bl-m .in{color:var(--primary)}.bl-m .out{color:var(--danger)}
+.bl-mini{list-style:none;margin:0;padding:0 18px 14px}.bl-mini li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--border);font-size:14px}.bl-mini li span{min-width:0;overflow-wrap:anywhere}

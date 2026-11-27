@@ -2,7 +2,7 @@
 const root = document.getElementById('root');
 const ars = n => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n || 0);
 const NAV = [
-  ['dashboard', 'Dashboard', 'dashboard'], ['caja', 'Caja y Ventas', 'cash'], ['flujo', 'Flujo de caja', 'wallet'], ['reportes', 'Estadísticas', 'trend'],
+  ['dashboard', 'Dashboard', 'dashboard'], ['caja', 'Caja y Ventas', 'cash'], ['balance', 'Balance', 'balance'], ['presupuestos', 'Presupuestos', 'quote'], ['flujo', 'Flujo de caja', 'wallet'], ['reportes', 'Estadísticas', 'trend'],
   ['inventario', 'Inventario & Stock', 'box'], ['asistente', 'Asistente IA', 'spark'], ['fiados', 'Cuaderno de Fiados', 'book'], ['deudas', 'Deudas', 'scale'], ['clientes', 'Clientes', 'users'],
   ['proveedores', 'Proveedores', 'truck'], ['catalogo', 'Catálogo Digital', 'store'], ['estudio', 'Estudio de Diseño', 'palette'], ['config', 'Configuración', 'settings']
 ];

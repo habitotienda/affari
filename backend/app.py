@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import database as db
 import auth_handler as auth
-import reports, exporters, operations as ops, movements, ai_agent, cf_images, hours as hrs, google_auth, billing, treinta_import, image_store
+import reports, exporters, operations as ops, movements, balance, quotes, ai_agent, cf_images, hours as hrs, google_auth, billing, treinta_import, image_store
 
 load_dotenv()
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -917,6 +917,8 @@ def public_qr(slug: str, request: Request):
 
 app.include_router(google_auth.make_router(load_user, public_user))   # inicio de sesión con Google + /api/config
 app.include_router(ops.make_router(current_user))     # parte 5: variantes, proveedores, deudas, caja, comprobantes
+app.include_router(balance.make_router(current_user))   # Balance mensual (ingresos, egresos, ganancia, medios de pago)
+app.include_router(quotes.make_router(current_user))    # Presupuestos
 app.include_router(movements.make_router(current_user))  # corregir entradas y salidas: editar, anular y restaurar
 app.include_router(billing.make_router(current_user, forget_user, db))   # planes, checkout y webhook de Mercado Pago
 app.include_router(ai_agent.make_router(current_user))  # asistente IA (Gemini / Groq)

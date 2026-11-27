@@ -362,14 +362,14 @@ const head = (h, p, actions = '') => `<header class="page-head"><div><h1>${h}</h
 const VIEWS = {
   async caja(el) {
     const [d, list] = await Promise.all([api('/dashboard'), api('/sales')]), k = d.kpis;
-    el.innerHTML = head('Caja y Ventas', 'Todos los movimientos de tu negocio.', `<button class="btn" data-exp>${icon('plus')}Registrar gasto</button><button class="btn btn-primary" data-sale>${icon('plus')}Nueva venta</button>`) + `
+    el.innerHTML = head('Caja y Ventas', 'Todos los movimientos de tu negocio.', `<button class="btn" data-quote>${icon('quote')}Presupuesto</button><button class="btn" data-exp>${icon('plus')}Registrar gasto</button><button class="btn btn-primary" data-sale>${icon('plus')}Nueva venta</button>`) + `
       <section class="kpis"><div class="card kpi pos"><span>Ventas del día</span><strong>${ars(k.sales_today)}</strong><small>${k.sales_count} operaciones</small></div>
       <div class="card kpi"><span>Efectivo en caja hoy</span><strong>${ars(k.cash)}</strong><small>Entradas menos salidas</small></div>
       <div class="card kpi"><span>Transferencias hoy</span><strong>${ars(k.transfer)}</strong><small>Entradas menos salidas</small></div>
       <div class="card kpi"><span>Tarjeta hoy</span><strong>${ars(k.card)}</strong><small>Débito y crédito</small></div></section>
       <div class="card tbl-wrap">${list.length ? `<table><thead><tr><th>Fecha</th><th>Concepto</th><th>Tipo</th><th>Medio</th><th class="num">Monto</th><th class="mv-col"><span class="sr-only">Corregir</span></th></tr></thead><tbody>${list.map((m, ix) => `<tr${tkAttr(m, ix)}><td class="muted">${when(m.created_at)}</td><td>${esc(m.concept)}${tkChip(m)}${mvInline(m, ix)}</td><td><span class="badge b-${m.kind}">${m.is_payment ? 'Cobro' : KIND[m.kind]}</span></td><td>${esc(m.method)}</td><td class="num ${m.kind === 'salida' ? 'neg' : ''}">${m.kind === 'salida' ? '−' : ''}${ars(m.amount)}</td><td class="mv-act mv-col">${mvActions(m, ix)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Todavía no hay movimientos. Registrá tu primera venta.</div>'}</div>`;
     bindTickets(el, list); bindMoveActions(el, list);
-    el.querySelector('[data-sale]').onclick = () => openSaleModal(); el.querySelector('[data-exp]').onclick = () => openSaleModal('salida');
+    el.querySelector('[data-sale]').onclick = () => openSaleModal(); el.querySelector('[data-exp]').onclick = () => openSaleModal('salida'); el.querySelector('[data-quote]').onclick = () => openQuoteFlow();
   },
   async fiados(el) {
     const cs = await api('/clients'), total = cs.reduce((s, c) => s + c.balance, 0);

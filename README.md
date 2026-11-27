@@ -111,6 +111,7 @@ backend/
 css/ ops.css        estilos de la parte 5
 js/  ops.js         clientes, proveedores, deudas, flujo de caja
      movements.js   editar / anular / restaurar movimientos de caja (backend/movements.py)
+     balance.js     Balance mensual (backend/balance.py) · quotes.js  Presupuestos (backend/quotes.py)
      ops-docs.js    inventario con variantes, comprobantes, datos fiscales
 ```
 
@@ -124,6 +125,12 @@ En **Caja y Ventas** y en el detalle de **Flujo de caja**, cada movimiento tiene
 - Todo ocurre en una sola transacción: si algo falla (p. ej. stock insuficiente al subir la cantidad) no se cambia nada. Cada negocio solo puede corregir sus propios movimientos.
 Código: `backend/movements.py` (`PUT /api/sales/{id}`, `POST /api/sales/{id}/void`, `POST /api/sales/{id}/restore`) · `js/movements.js` + `css/movements.css` · columnas nuevas `sales.voided_at`, `void_reason`, `edited_at` (migración automática) · los filtros `voided_at IS NULL` están en `reports.py` (`IN_RANGE`), `operations.py` (flujo de caja y deudas) y `app.py` (dashboard).
 **Si agregás un cálculo nuevo sobre `sales`, acordate de excluir `voided_at IS NOT NULL`.** Pruebas: `python tests/movements_test.py` · `node tests/js/movements.test.js`.
+
+## Balance mensual y Presupuestos
+**Balance** (menú «Balance», `backend/balance.py` + `js/balance.js`, estilo Treinta): elegís el mes (últimos meses + calendario), ves **Balance = Ingresos − Egresos** y abajo las pestañas **Ingresos / Egresos** con cada movimiento (medio de pago, fecha y hora, «Pagado»). Cada fila permite **Editar / Anular / Restaurar** (ver «Corregir entradas y salidas»). «Ver balance ›» abre el detalle: **Ganancia estimada** (ventas del mes − costo de los productos vendidos; avisa cuántas ventas no tienen producto y por eso no restan costo) y el neto por **medio de pago** (Efectivo, Transferencia, Tarjeta), desplegable con sus movimientos. «Descargar reportes» baja el Excel del mes (función de plan Pro/Negocio). Ingresos = entradas de caja (ventas cobradas y cobros de fiados); un fiado cuenta como venta para la ganancia pero no como ingreso hasta cobrarlo. Los anulados no suman.
+
+**Presupuestos** (menú «Presupuestos» o botón «Presupuesto» en Caja y Ventas; `backend/quotes.py` + `js/quotes.js`, tabla `quotes`): se arman igual que una venta — elegís productos (aparecen aunque no tengan stock) o cargás un **ítem libre** con descripción y **cuánto vale**, ajustás cantidades y precios, descuento, cliente (opcional), **validez** (7 / 15 / 30 días o sin vencimiento) y nota — y queda una **imagen** del presupuesto para **Compartir / WhatsApp / Guardar**. No descuenta stock ni mueve la caja. Desde la lista se reabre para reenviarlo, se marca **Pendiente / Aceptado / Rechazado** (los pendientes pasados de fecha se ven «Vencido») o se elimina.
+Pruebas: `python tests/balance_quotes_test.py`.
 
 ## Parte 5: qué incluye
 | Módulo | Dónde |
